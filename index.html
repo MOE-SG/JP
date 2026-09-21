@@ -824,26 +824,21 @@
     ];
   }
 
-  // Plain browser download via a temporary object URL + a hidden <a download>
-  // click - works everywhere this page can be hosted (GitHub Pages, offline
-  // as an installed PWA, any static host). Returns true so callers can share
-  // the same "did it succeed" branching used everywhere else in the app.
-  async function triggerDownload(blob, filename) {
+  function triggerDownload(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    return true;
   }
 
   function doneMessage(outName) {
     const cols = state.metaCols.concat(state.dataCols);
-    return 'Done — saved ' + outName + ' (' + state.pulserFiles.length + ' PulserDiag files, ' + state.rows.length + ' rows, ' + cols.length + ' columns).';
+    return 'Done — downloaded ' + outName + ' (' + state.pulserFiles.length + ' PulserDiag files, ' + state.rows.length + ' rows, ' + cols.length + ' columns).';
   }
 
   // --- CSV: info block, then summary table, then the full combined data table ---
-  async function downloadCsvReport() {
+  function downloadCsvReport() {
     clearNotice();
     const cols = state.metaCols.concat(state.dataCols);
     const lines = [];
@@ -865,8 +860,8 @@
 
     const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8;' });
     const outName = baseOutName() + '.csv';
-    const ok = await triggerDownload(blob, outName);
-    if (ok) showNotice('ok', doneMessage(outName));
+    triggerDownload(blob, outName);
+    showNotice('ok', doneMessage(outName));
   }
 
   // --- Excel: same content as the CSV report, but as real cell fills/colors ---
@@ -974,8 +969,8 @@
       const buffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const outName = baseOutName() + '.xlsx';
-      const ok = await triggerDownload(blob, outName);
-      if (ok) showNotice('ok', doneMessage(outName));
+      triggerDownload(blob, outName);
+      showNotice('ok', doneMessage(outName));
     } catch (err) {
       showNotice('err', 'Something went wrong while building the Excel file: ' + err.message);
     } finally {
@@ -986,7 +981,7 @@
 
   // --- HTML report: a standalone snapshot page reusing this page's own <style>
   // and the exact same table-building functions, so it looks identical offline. ---
-  async function downloadHtmlReport() {
+  function downloadHtmlReport() {
     clearNotice();
     const pageStyle = document.querySelector('style').textContent;
     const summary = summaryTableHtml();
@@ -1004,8 +999,8 @@
 
     const blob = new Blob([doc], { type: 'text/html;charset=utf-8;' });
     const outName = baseOutName() + '.html';
-    const ok = await triggerDownload(blob, outName);
-    if (ok) showNotice('ok', doneMessage(outName));
+    triggerDownload(blob, outName);
+    showNotice('ok', doneMessage(outName));
   }
 })();
 </script>
