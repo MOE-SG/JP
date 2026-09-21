@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDC Combiner</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --border: #d7dbe0;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --ok: #16a34a;
+    --warn: #b45309;
+    --warn-bg: #fffbeb;
+    --err: #dc2626;
+    --err-bg: #fef2f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1rem;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.75rem;
+    max-width: 640px;
+    width: 100%;
+  }
+  h1 {
+    font-size: 1.25rem;
+    margin: 0 0 0.25rem;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin: 0 0 1.5rem;
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 2rem 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone:hover, .dropzone.drag {
+    border-color: var(--accent);
+    background: #f0f5ff;
+  }
+  .dropzone p {
+    margin: 0.25rem 0;
+    color: var(--muted);
+  }
+  .dropzone strong {
+    color: var(--text);
+  }
+  input[type="file"] { display: none; }
+  button {
+    font: inherit;
+    border: none;
+    border-radius: 6px;
+    padding: 0.6rem 1.1rem;
+    cursor: pointer;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled {
+    background: #b8c2d1;
+    cursor: not-allowed;
+  }
+  .section {
+    margin-top: 1.5rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.35rem 0;
+    font-size: 0.92rem;
+  }
+  .row .label { color: var(--muted); }
+  .row .val { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .badge.ok { background: #ecfdf5; color: var(--ok); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .badge.err { background: var(--err-bg); color: var(--err); }
+  .filelist {
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.82rem;
+  }
+  .filelist div {
+    padding: 0.3rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  .filelist div:last-child { border-bottom: none; }
+  .filelist .idx { color: var(--muted); flex: none; width: 1.5rem; }
+  .filelist .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filelist .rows { color: var(--muted); flex: none; }
+  .manual {
+    margin-top: 0.75rem;
+    display: none;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .manual.show { display: flex; }
+  .manual label {
+    font-size: 0.85rem;
+    color: var(--warn);
+    font-weight: 600;
+  }
+  .manual input {
+    font: inherit;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    width: 8rem;
+  }
+  .notice {
+    margin-top: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    display: none;
+  }
+  .notice.show { display: block; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn); }
+  .notice.err { background: var(--err-bg); color: var(--err); }
+  .actions {
+    margin-top: 1.5rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .outname {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .reset {
+    background: none;
+    color: var(--muted);
+    text-decoration: underline;
+    font-weight: 400;
+    padding: 0.3rem 0;
+  }
+  .reset:hover { background: none; color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>SDC Combiner</h1>
+  <p class="sub">Select the test folder (the one containing the <strong>ACC</strong> and <strong>SDC</strong> subfolders). All CSVs inside <strong>SDC</strong> will be appended in ascending filename order into one file.</p>
+
+  <div class="dropzone" id="dropzone">
+    <p><strong>Click to choose a folder</strong></p>
+    <p>or drag a folder here</p>
+    <input type="file" id="folderInput" webkitdirectory directory multiple>
+  </div>
+
+  <div class="notice" id="globalNotice"></div>
+
+  <div class="section" id="resultSection" style="display:none;">
+    <div class="row">
+      <span class="label">Selected folder</span>
+      <span class="val" id="folderName">—</span>
+    </div>
+    <div class="row">
+      <span class="label">Size</span>
+      <span class="val"><span id="sizeVal">—</span> <span class="badge" id="sizeBadge"></span></span>
+    </div>
+    <div class="manual" id="sizeManualWrap">
+      <label for="sizeManual">Size not detected — enter it:</label>
+      <input type="text" id="sizeManual" placeholder="e.g. 6.75">
+    </div>
+    <div class="row">
+      <span class="label">Serial number (8 digits)</span>
+      <span class="val"><span id="serialVal">—</span> <span class="badge" id="serialBadge"></span></span>
+    </div>
+    <div class="manual" id="serialManualWrap">
+      <label for="serialManual">Serial not detected — enter it:</label>
+      <input type="text" id="serialManual" placeholder="8 digits" maxlength="8">
+    </div>
+
+    <div class="section">
+      <div class="row">
+        <span class="label">SDC files found (ascending filename order)</span>
+        <span class="val" id="fileCount">0</span>
+      </div>
+      <div class="filelist" id="fileList"></div>
+    </div>
+
+    <div class="actions">
+      <button id="combineBtn" disabled>Combine &amp; Download</button>
+      <button class="reset" id="resetBtn" type="button">Choose a different folder</button>
+    </div>
+    <p class="outname" id="outName"></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  const folderInput = document.getElementById('folderInput');
+  const dropzone = document.getElementById('dropzone');
+  const resultSection = document.getElementById('resultSection');
+  const globalNotice = document.getElementById('globalNotice');
+  const folderNameEl = document.getElementById('folderName');
+  const sizeValEl = document.getElementById('sizeVal');
+  const sizeBadgeEl = document.getElementById('sizeBadge');
+  const sizeManualWrap = document.getElementById('sizeManualWrap');
+  const sizeManualInput = document.getElementById('sizeManual');
+  const serialValEl = document.getElementById('serialVal');
+  const serialBadgeEl = document.getElementById('serialBadge');
+  const serialManualWrap = document.getElementById('serialManualWrap');
+  const serialManualInput = document.getElementById('serialManual');
+  const fileCountEl = document.getElementById('fileCount');
+  const fileListEl = document.getElementById('fileList');
+  const combineBtn = document.getElementById('combineBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const outNameEl = document.getElementById('outName');
+
+  let state = {
+    folderName: '',
+    size: null,
+    serial: null,
+    sdcFiles: [] // {file, name}
+  };
+
+  dropzone.addEventListener('click', () => folderInput.click());
+
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('drag');
+  });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    // Directory drop via webkitGetAsEntry is inconsistent across browsers;
+    // fall back to asking the user to use the folder picker for reliability.
+    showNotice('warn', 'Drag-and-drop of folders is unreliable across browsers — please click and use the folder picker instead.');
+  });
+
+  folderInput.addEventListener('change', handleFiles);
+  resetBtn.addEventListener('click', resetAll);
+  sizeManualInput.addEventListener('input', updateFromManualInputs);
+  serialManualInput.addEventListener('input', updateFromManualInputs);
+  combineBtn.addEventListener('click', combineAndDownload);
+
+  function showNotice(kind, msg) {
+    globalNotice.className = 'notice show ' + kind;
+    globalNotice.style.background = '';
+    globalNotice.style.color = '';
+    globalNotice.textContent = msg;
+  }
+  function clearNotice() {
+    globalNotice.className = 'notice';
+    globalNotice.style.background = '';
+    globalNotice.style.color = '';
+    globalNotice.textContent = '';
+  }
+
+  function resetAll() {
+    folderInput.value = '';
+    state = { folderName: '', size: null, serial: null, sdcFiles: [] };
+    resultSection.style.display = 'none';
+    clearNotice();
+  }
+
+  function handleFiles(e) {
+    clearNotice();
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Root folder = first path segment of any file's relative path.
+    const firstPath = files[0].webkitRelativePath || files[0].name;
+    const rootFolder = firstPath.split('/')[0];
+
+    // Find files that live inside a path segment literally named "SDC" (case-insensitive).
+    const sdcFiles = files.filter((f) => {
+      const rel = f.webkitRelativePath || '';
+      const parts = rel.split('/');
+      const inSDC = parts.some((p) => p.toUpperCase() === 'SDC');
+      const isCsv = /\.csv$/i.test(f.name);
+      const isCombined = /^combined/i.test(f.name);
+      return inSDC && isCsv && !isCombined;
+    });
+
+    if (sdcFiles.length === 0) {
+      showNotice('err', 'No SDC subfolder with CSV files was found inside "' + rootFolder + '". Make sure you selected the parent test folder (the one containing ACC and SDC).');
+      resultSection.style.display = 'none';
+      return;
+    }
+
+    // Sort ascending by filename.
+    sdcFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: false }));
+
+    state.folderName = rootFolder;
+    state.sdcFiles = sdcFiles;
+    state.size = extractSize(rootFolder);
+    state.serial = extractSerial(rootFolder);
+
+    render();
+  }
+
+  function extractSize(name) {
+    // Folder name starts with the size: e.g. "4.75", "6.75", "8", followed by a space or letter.
+    const m = name.match(/^(\d+(?:\.\d+)?)/);
+    return m ? m[1] : null;
+  }
+
+  function extractSerial(name) {
+    // A run of exactly 8 consecutive digits, not part of a longer digit run.
+    const m = name.match(/(?<!\d)(\d{8})(?!\d)/);
+    return m ? m[1] : null;
+  }
+
+  function render() {
+    resultSection.style.display = 'block';
+    folderNameEl.textContent = state.folderName;
+
+    if (state.size) {
+      sizeValEl.textContent = state.size;
+      sizeBadgeEl.textContent = 'detected';
+      sizeBadgeEl.className = 'badge ok';
+      sizeManualWrap.classList.remove('show');
+    } else {
+      sizeValEl.textContent = '—';
+      sizeBadgeEl.textContent = 'not found';
+      sizeBadgeEl.className = 'badge warn';
+      sizeManualWrap.classList.add('show');
+    }
+
+    if (state.serial) {
+      serialValEl.textContent = state.serial;
+      serialBadgeEl.textContent = 'detected';
+      serialBadgeEl.className = 'badge ok';
+      serialManualWrap.classList.remove('show');
+    } else {
+      serialValEl.textContent = '—';
+      serialBadgeEl.textContent = 'not found';
+      serialBadgeEl.className = 'badge warn';
+      serialManualWrap.classList.add('show');
+    }
+
+    fileCountEl.textContent = state.sdcFiles.length;
+    fileListEl.innerHTML = '';
+    state.sdcFiles.forEach((f, i) => {
+      const row = document.createElement('div');
+      row.innerHTML =
+        '<span class="idx">' + (i + 1) + '.</span>' +
+        '<span class="name" title="' + f.name + '">' + f.name + '</span>';
+      fileListEl.appendChild(row);
+    });
+
+    updateOutputNameAndButton();
+  }
+
+  function updateFromManualInputs() {
+    updateOutputNameAndButton();
+  }
+
+  function effectiveSize() {
+    if (state.size) return state.size;
+    const v = sizeManualInput.value.trim();
+    return v ? v : null;
+  }
+  function effectiveSerial() {
+    if (state.serial) return state.serial;
+    const v = serialManualInput.value.trim();
+    return /^\d{8}$/.test(v) ? v : (v || null);
+  }
+
+  function todayYYMMDD() {
+    const d = new Date();
+    const yy = String(d.getFullYear()).slice(-2);
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return yy + mm + dd;
+  }
+
+  function updateOutputNameAndButton() {
+    const size = effectiveSize();
+    const serial = effectiveSerial();
+    if (size && serial) {
+      const name = size + '_' + serial + '_' + todayYYMMDD() + '.csv';
+      outNameEl.textContent = 'Will save as: ' + name;
+      combineBtn.disabled = false;
+    } else {
+      const missing = [];
+      if (!size) missing.push('size');
+      if (!serial) missing.push('serial number');
+      outNameEl.textContent = 'Enter the missing ' + missing.join(' and ') + ' above to continue.';
+      combineBtn.disabled = true;
+    }
+  }
+
+  function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+  }
+
+  async function combineAndDownload() {
+    clearNotice();
+    combineBtn.disabled = true;
+    combineBtn.textContent = 'Combining…';
+
+    try {
+      let header = null;
+      const dataLines = [];
+
+      for (const f of state.sdcFiles) {
+        const text = await readFileAsText(f);
+        const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+        // Drop trailing blank lines.
+        while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+        if (lines.length === 0) continue;
+
+        if (header === null) {
+          header = lines[0];
+          dataLines.push(...lines.slice(1));
+        } else {
+          dataLines.push(...lines.slice(1));
+        }
+      }
+
+      if (header === null) {
+        showNotice('err', 'None of the selected files had any content.');
+        return;
+      }
+
+      const combined = [header, ...dataLines].join('\n') + '\n';
+      const blob = new Blob([combined], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const outName = effectiveSize() + '_' + effectiveSerial() + '_' + todayYYMMDD() + '.csv';
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = outName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      globalNotice.className = 'notice show';
+      globalNotice.style.background = '#ecfdf5';
+      globalNotice.style.color = '#16a34a';
+      globalNotice.textContent = 'Done — downloaded ' + outName + ' (' + state.sdcFiles.length + ' files, ' + dataLines.length + ' data rows).';
+    } catch (err) {
+      showNotice('err', 'Something went wrong while combining: ' + err.message);
+    } finally {
+      combineBtn.disabled = false;
+      combineBtn.textContent = 'Combine & Download';
+    }
+  }
+})();
+</script>
+
+</body>
+</html>
