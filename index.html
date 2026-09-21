@@ -34,7 +34,7 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1.75rem;
-    max-width: 640px;
+    max-width: 760px;
     width: 100%;
   }
   h1 {
@@ -86,64 +86,111 @@
     padding-top: 1.25rem;
     border-top: 1px solid var(--border);
   }
-  .row {
+  .summary-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0.35rem 0;
     font-size: 0.92rem;
   }
-  .row .label { color: var(--muted); }
-  .row .val { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .summary-row .label { color: var(--muted); }
+  .summary-row .val { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .badge {
     display: inline-block;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     padding: 0.1rem 0.5rem;
     border-radius: 999px;
     font-weight: 600;
+    white-space: nowrap;
   }
   .badge.ok { background: #ecfdf5; color: var(--ok); }
   .badge.warn { background: var(--warn-bg); color: var(--warn); }
   .badge.err { background: var(--err-bg); color: var(--err); }
-  .filelist {
-    max-height: 220px;
-    overflow-y: auto;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin-top: 0.5rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.82rem;
-  }
-  .filelist div {
-    padding: 0.3rem 0.6rem;
-    border-bottom: 1px solid var(--border);
+  .groups {
     display: flex;
-    justify-content: space-between;
-    gap: 0.5rem;
-  }
-  .filelist div:last-child { border-bottom: none; }
-  .filelist .idx { color: var(--muted); flex: none; width: 1.5rem; }
-  .filelist .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .filelist .rows { color: var(--muted); flex: none; }
-  .manual {
+    flex-direction: column;
+    gap: 0.75rem;
     margin-top: 0.75rem;
+  }
+  .group {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .group-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    background: #fafbfc;
+    cursor: pointer;
+  }
+  .group-head .name {
+    font-weight: 600;
+    font-size: 0.88rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .group-head .meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: none;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .group-body {
+    padding: 0.7rem 0.8rem;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+  .group.open .group-body { display: block; }
+  .group.open .chevron { transform: rotate(90deg); }
+  .chevron {
+    display: inline-block;
+    transition: transform 0.15s;
+    color: var(--muted);
+    flex: none;
+  }
+  .manual-row {
     display: none;
     align-items: center;
     gap: 0.5rem;
+    margin-bottom: 0.5rem;
   }
-  .manual.show { display: flex; }
-  .manual label {
-    font-size: 0.85rem;
+  .manual-row.show { display: flex; }
+  .manual-row label {
+    font-size: 0.82rem;
     color: var(--warn);
     font-weight: 600;
+    flex: none;
+    width: 6.5rem;
   }
-  .manual input {
+  .manual-row input {
     font: inherit;
-    padding: 0.4rem 0.6rem;
+    padding: 0.35rem 0.55rem;
     border: 1px solid var(--border);
     border-radius: 6px;
     width: 8rem;
+    font-size: 0.85rem;
   }
+  .filelist {
+    max-height: 180px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-top: 0.4rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8rem;
+  }
+  .filelist div {
+    padding: 0.28rem 0.55rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .filelist div:last-child { border-bottom: none; }
+  .filelist .idx { color: var(--muted); margin-right: 0.4rem; }
   .notice {
     margin-top: 0.75rem;
     padding: 0.6rem 0.8rem;
@@ -154,16 +201,32 @@
   .notice.show { display: block; }
   .notice.warn { background: var(--warn-bg); color: var(--warn); }
   .notice.err { background: var(--err-bg); color: var(--err); }
+  .outname-row {
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .outname-row label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    flex: none;
+  }
+  .outname-row input {
+    font: inherit;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    flex: 1;
+    min-width: 0;
+  }
   .actions {
-    margin-top: 1.5rem;
+    margin-top: 1rem;
     display: flex;
     gap: 0.75rem;
     align-items: center;
-  }
-  .outname {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.9rem;
-    color: var(--muted);
   }
   .reset {
     background: none;
@@ -179,7 +242,7 @@
 
 <div class="card">
   <h1>SDC Combiner</h1>
-  <p class="sub">Select the test folder (the one containing the <strong>ACC</strong> and <strong>SDC</strong> subfolders). All CSVs inside <strong>SDC</strong> will be appended in ascending filename order into one file.</p>
+  <p class="sub">Select a folder anywhere above your test folders. Every <strong>SDC</strong> subfolder found inside it (at any depth) will be scanned. Each file gets tagged with the <strong>Size</strong> and <strong>serial number</strong> read from the folder one level above its <strong>ACC</strong>/<strong>SDC</strong> pair, then everything is appended into one CSV with those two columns added at the front. <code>combined_SDC.csv</code>-style files are skipped automatically.</p>
 
   <div class="dropzone" id="dropzone">
     <p><strong>Click to choose a folder</strong></p>
@@ -190,40 +253,26 @@
   <div class="notice" id="globalNotice"></div>
 
   <div class="section" id="resultSection" style="display:none;">
-    <div class="row">
-      <span class="label">Selected folder</span>
-      <span class="val" id="folderName">—</span>
+    <div class="summary-row">
+      <span class="label">Test folders found (with an SDC subfolder)</span>
+      <span class="val" id="groupCount">0</span>
     </div>
-    <div class="row">
-      <span class="label">Size</span>
-      <span class="val"><span id="sizeVal">—</span> <span class="badge" id="sizeBadge"></span></span>
-    </div>
-    <div class="manual" id="sizeManualWrap">
-      <label for="sizeManual">Size not detected — enter it:</label>
-      <input type="text" id="sizeManual" placeholder="e.g. 6.75">
-    </div>
-    <div class="row">
-      <span class="label">Serial number (8 digits)</span>
-      <span class="val"><span id="serialVal">—</span> <span class="badge" id="serialBadge"></span></span>
-    </div>
-    <div class="manual" id="serialManualWrap">
-      <label for="serialManual">Serial not detected — enter it:</label>
-      <input type="text" id="serialManual" placeholder="8 digits" maxlength="8">
+    <div class="summary-row">
+      <span class="label">Total CSV files</span>
+      <span class="val" id="totalFiles">0</span>
     </div>
 
-    <div class="section">
-      <div class="row">
-        <span class="label">SDC files found (ascending filename order)</span>
-        <span class="val" id="fileCount">0</span>
-      </div>
-      <div class="filelist" id="fileList"></div>
+    <div class="groups" id="groupsEl"></div>
+
+    <div class="outname-row">
+      <label for="outNameInput">Output file</label>
+      <input type="text" id="outNameInput">
     </div>
 
     <div class="actions">
       <button id="combineBtn" disabled>Combine &amp; Download</button>
       <button class="reset" id="resetBtn" type="button">Choose a different folder</button>
     </div>
-    <p class="outname" id="outName"></p>
   </div>
 </div>
 
@@ -233,30 +282,19 @@
   const dropzone = document.getElementById('dropzone');
   const resultSection = document.getElementById('resultSection');
   const globalNotice = document.getElementById('globalNotice');
-  const folderNameEl = document.getElementById('folderName');
-  const sizeValEl = document.getElementById('sizeVal');
-  const sizeBadgeEl = document.getElementById('sizeBadge');
-  const sizeManualWrap = document.getElementById('sizeManualWrap');
-  const sizeManualInput = document.getElementById('sizeManual');
-  const serialValEl = document.getElementById('serialVal');
-  const serialBadgeEl = document.getElementById('serialBadge');
-  const serialManualWrap = document.getElementById('serialManualWrap');
-  const serialManualInput = document.getElementById('serialManual');
-  const fileCountEl = document.getElementById('fileCount');
-  const fileListEl = document.getElementById('fileList');
+  const groupCountEl = document.getElementById('groupCount');
+  const totalFilesEl = document.getElementById('totalFiles');
+  const groupsEl = document.getElementById('groupsEl');
+  const outNameInput = document.getElementById('outNameInput');
   const combineBtn = document.getElementById('combineBtn');
   const resetBtn = document.getElementById('resetBtn');
-  const outNameEl = document.getElementById('outName');
 
-  let state = {
-    folderName: '',
-    size: null,
-    serial: null,
-    sdcFiles: [] // {file, name}
-  };
+  // Each group = one folder that sits directly above an SDC (and, normally, ACC) subfolder.
+  // { id, parentPath, parentName, size, serial, manualSize, manualSerial, files: [File...] }
+  let groups = [];
+  let outNameTouched = false;
 
   dropzone.addEventListener('click', () => folderInput.click());
-
   dropzone.addEventListener('dragover', (e) => {
     e.preventDefault();
     dropzone.classList.add('drag');
@@ -265,16 +303,13 @@
   dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
     dropzone.classList.remove('drag');
-    // Directory drop via webkitGetAsEntry is inconsistent across browsers;
-    // fall back to asking the user to use the folder picker for reliability.
     showNotice('warn', 'Drag-and-drop of folders is unreliable across browsers — please click and use the folder picker instead.');
   });
 
   folderInput.addEventListener('change', handleFiles);
   resetBtn.addEventListener('click', resetAll);
-  sizeManualInput.addEventListener('input', updateFromManualInputs);
-  serialManualInput.addEventListener('input', updateFromManualInputs);
   combineBtn.addEventListener('click', combineAndDownload);
+  outNameInput.addEventListener('input', () => { outNameTouched = true; });
 
   function showNotice(kind, msg) {
     globalNotice.className = 'notice show ' + kind;
@@ -291,45 +326,10 @@
 
   function resetAll() {
     folderInput.value = '';
-    state = { folderName: '', size: null, serial: null, sdcFiles: [] };
+    groups = [];
+    outNameTouched = false;
     resultSection.style.display = 'none';
     clearNotice();
-  }
-
-  function handleFiles(e) {
-    clearNotice();
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-
-    // Root folder = first path segment of any file's relative path.
-    const firstPath = files[0].webkitRelativePath || files[0].name;
-    const rootFolder = firstPath.split('/')[0];
-
-    // Find files that live inside a path segment literally named "SDC" (case-insensitive).
-    const sdcFiles = files.filter((f) => {
-      const rel = f.webkitRelativePath || '';
-      const parts = rel.split('/');
-      const inSDC = parts.some((p) => p.toUpperCase() === 'SDC');
-      const isCsv = /\.csv$/i.test(f.name);
-      const isCombined = /^combined/i.test(f.name);
-      return inSDC && isCsv && !isCombined;
-    });
-
-    if (sdcFiles.length === 0) {
-      showNotice('err', 'No SDC subfolder with CSV files was found inside "' + rootFolder + '". Make sure you selected the parent test folder (the one containing ACC and SDC).');
-      resultSection.style.display = 'none';
-      return;
-    }
-
-    // Sort ascending by filename.
-    sdcFiles.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: false }));
-
-    state.folderName = rootFolder;
-    state.sdcFiles = sdcFiles;
-    state.size = extractSize(rootFolder);
-    state.serial = extractSerial(rootFolder);
-
-    render();
   }
 
   function extractSize(name) {
@@ -337,69 +337,11 @@
     const m = name.match(/^(\d+(?:\.\d+)?)/);
     return m ? m[1] : null;
   }
-
   function extractSerial(name) {
     // A run of exactly 8 consecutive digits, not part of a longer digit run.
     const m = name.match(/(?<!\d)(\d{8})(?!\d)/);
     return m ? m[1] : null;
   }
-
-  function render() {
-    resultSection.style.display = 'block';
-    folderNameEl.textContent = state.folderName;
-
-    if (state.size) {
-      sizeValEl.textContent = state.size;
-      sizeBadgeEl.textContent = 'detected';
-      sizeBadgeEl.className = 'badge ok';
-      sizeManualWrap.classList.remove('show');
-    } else {
-      sizeValEl.textContent = '—';
-      sizeBadgeEl.textContent = 'not found';
-      sizeBadgeEl.className = 'badge warn';
-      sizeManualWrap.classList.add('show');
-    }
-
-    if (state.serial) {
-      serialValEl.textContent = state.serial;
-      serialBadgeEl.textContent = 'detected';
-      serialBadgeEl.className = 'badge ok';
-      serialManualWrap.classList.remove('show');
-    } else {
-      serialValEl.textContent = '—';
-      serialBadgeEl.textContent = 'not found';
-      serialBadgeEl.className = 'badge warn';
-      serialManualWrap.classList.add('show');
-    }
-
-    fileCountEl.textContent = state.sdcFiles.length;
-    fileListEl.innerHTML = '';
-    state.sdcFiles.forEach((f, i) => {
-      const row = document.createElement('div');
-      row.innerHTML =
-        '<span class="idx">' + (i + 1) + '.</span>' +
-        '<span class="name" title="' + f.name + '">' + f.name + '</span>';
-      fileListEl.appendChild(row);
-    });
-
-    updateOutputNameAndButton();
-  }
-
-  function updateFromManualInputs() {
-    updateOutputNameAndButton();
-  }
-
-  function effectiveSize() {
-    if (state.size) return state.size;
-    const v = sizeManualInput.value.trim();
-    return v ? v : null;
-  }
-  function effectiveSerial() {
-    if (state.serial) return state.serial;
-    const v = serialManualInput.value.trim();
-    return /^\d{8}$/.test(v) ? v : (v || null);
-  }
-
   function todayYYMMDD() {
     const d = new Date();
     const yy = String(d.getFullYear()).slice(-2);
@@ -408,20 +350,158 @@
     return yy + mm + dd;
   }
 
-  function updateOutputNameAndButton() {
-    const size = effectiveSize();
-    const serial = effectiveSerial();
-    if (size && serial) {
-      const name = size + '_' + serial + '_' + todayYYMMDD() + '.csv';
-      outNameEl.textContent = 'Will save as: ' + name;
-      combineBtn.disabled = false;
-    } else {
-      const missing = [];
-      if (!size) missing.push('size');
-      if (!serial) missing.push('serial number');
-      outNameEl.textContent = 'Enter the missing ' + missing.join(' and ') + ' above to continue.';
-      combineBtn.disabled = true;
+  function handleFiles(e) {
+    clearNotice();
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    // Group files by the folder that sits directly above their SDC folder.
+    const map = new Map(); // parentPath -> group
+    let sdcFolderSeen = false;
+
+    files.forEach((f) => {
+      const rel = f.webkitRelativePath || f.name;
+      const parts = rel.split('/');
+      const folderParts = parts.slice(0, -1); // drop the filename itself
+
+      // Use the deepest folder segment literally named "SDC" (closest to the file).
+      let sdcIdx = -1;
+      for (let i = folderParts.length - 1; i >= 0; i--) {
+        if (folderParts[i].toUpperCase() === 'SDC') { sdcIdx = i; break; }
+      }
+      if (sdcIdx === -1) return; // this file isn't inside any SDC folder
+      sdcFolderSeen = true;
+
+      if (!/\.csv$/i.test(f.name)) return;
+      if (/^combined/i.test(f.name)) return;
+
+      const parentIdx = sdcIdx - 1;
+      const parentPath = parentIdx >= 0 ? folderParts.slice(0, parentIdx + 1).join('/') : folderParts.slice(0, sdcIdx + 1).join('/');
+      const parentName = parentIdx >= 0 ? folderParts[parentIdx] : '(folder above SDC not in selection)';
+
+      if (!map.has(parentPath)) {
+        map.set(parentPath, {
+          id: parentPath,
+          parentPath,
+          parentName,
+          size: extractSize(parentName),
+          serial: extractSerial(parentName),
+          manualSize: '',
+          manualSerial: '',
+          files: []
+        });
+      }
+      map.get(parentPath).files.push(f);
+    });
+
+    groups = Array.from(map.values()).filter((g) => g.files.length > 0);
+    // Sort files within each group ascending by filename, and sort groups by folder name.
+    groups.forEach((g) => g.files.sort((a, b) => a.name.localeCompare(b.name)));
+    groups.sort((a, b) => a.parentName.localeCompare(b.parentName));
+
+    if (!sdcFolderSeen) {
+      showNotice('err', 'No folder named "SDC" was found anywhere inside the selected folder.');
+      resultSection.style.display = 'none';
+      return;
     }
+    if (groups.length === 0) {
+      showNotice('err', 'SDC folder(s) were found, but none contained usable CSV files (after skipping "combined..." files).');
+      resultSection.style.display = 'none';
+      return;
+    }
+
+    outNameTouched = false;
+    render();
+  }
+
+  function effSize(g) { return g.size || (g.manualSize || '').trim() || null; }
+  function effSerial(g) { return g.serial || (g.manualSerial || '').trim() || null; }
+
+  function computeDefaultOutName() {
+    if (groups.length === 1) {
+      const g = groups[0];
+      const size = effSize(g), serial = effSerial(g);
+      if (size && serial) return size + '_' + serial + '_' + todayYYMMDD() + '.csv';
+    }
+    return 'SDC_Combined_' + todayYYMMDD() + '.csv';
+  }
+
+  function render() {
+    resultSection.style.display = 'block';
+    groupCountEl.textContent = groups.length;
+    totalFilesEl.textContent = groups.reduce((n, g) => n + g.files.length, 0);
+
+    groupsEl.innerHTML = '';
+    groups.forEach((g) => {
+      const el = document.createElement('div');
+      el.className = 'group';
+
+      const sizeOk = !!g.size;
+      const serialOk = !!g.serial;
+      const sizeBadge = sizeOk ? '<span class="badge ok">size ' + g.size + '</span>' : '<span class="badge warn">size missing</span>';
+      const serialBadge = serialOk ? '<span class="badge ok">serial ' + g.serial + '</span>' : '<span class="badge warn">serial missing</span>';
+
+      el.innerHTML =
+        '<div class="group-head">' +
+          '<span class="chevron">&#9656;</span>' +
+          '<span class="name" title="' + g.parentName + '">' + g.parentName + '</span>' +
+          '<span class="meta">' + g.files.length + ' files ' + sizeBadge + ' ' + serialBadge + '</span>' +
+        '</div>' +
+        '<div class="group-body"></div>';
+
+      const body = el.querySelector('.group-body');
+
+      const sizeManualRow = document.createElement('div');
+      sizeManualRow.className = 'manual-row' + (sizeOk ? '' : ' show');
+      sizeManualRow.innerHTML = '<label>Size:</label><input type="text" placeholder="e.g. 6.75" value="' + g.manualSize + '">';
+      const sizeManualInput = sizeManualRow.querySelector('input');
+      sizeManualInput.addEventListener('input', () => { g.manualSize = sizeManualInput.value; updateGroupBadges(); updateCombineState(); });
+
+      const serialManualRow = document.createElement('div');
+      serialManualRow.className = 'manual-row' + (serialOk ? '' : ' show');
+      serialManualRow.innerHTML = '<label>Serial:</label><input type="text" placeholder="8 digits" maxlength="8" value="' + g.manualSerial + '">';
+      const serialManualInput = serialManualRow.querySelector('input');
+      serialManualInput.addEventListener('input', () => { g.manualSerial = serialManualInput.value; updateGroupBadges(); updateCombineState(); });
+
+      const fileList = document.createElement('div');
+      fileList.className = 'filelist';
+      g.files.forEach((f, i) => {
+        const row = document.createElement('div');
+        row.innerHTML = '<span class="idx">' + (i + 1) + '.</span>' + f.name;
+        fileList.appendChild(row);
+      });
+
+      body.appendChild(sizeManualRow);
+      body.appendChild(serialManualRow);
+      body.appendChild(fileList);
+
+      el.querySelector('.group-head').addEventListener('click', () => el.classList.toggle('open'));
+
+      // Keep references for badge updates.
+      el._sizeBadgeGetter = () => (effSize(g) ? '<span class="badge ok">size ' + effSize(g) + '</span>' : '<span class="badge warn">size missing</span>');
+      el._serialBadgeGetter = () => (effSerial(g) ? '<span class="badge ok">serial ' + effSerial(g) + '</span>' : '<span class="badge warn">serial missing</span>');
+      el._metaEl = el.querySelector('.meta');
+      el._fileCount = g.files.length;
+      g._el = el;
+
+      groupsEl.appendChild(el);
+    });
+
+    outNameInput.value = computeDefaultOutName();
+    updateCombineState();
+  }
+
+  function updateGroupBadges() {
+    groups.forEach((g) => {
+      if (!g._el) return;
+      g._el._metaEl.innerHTML = g._el._fileCount + ' files ' + g._el._sizeBadgeGetter() + ' ' + g._el._serialBadgeGetter();
+    });
+    if (!outNameTouched) outNameInput.value = computeDefaultOutName();
+  }
+
+  function updateCombineState() {
+    const allResolved = groups.every((g) => effSize(g) && effSerial(g));
+    combineBtn.disabled = !allResolved;
   }
 
   function readFileAsText(file) {
@@ -441,19 +521,25 @@
     try {
       let header = null;
       const dataLines = [];
+      let fileCount = 0;
 
-      for (const f of state.sdcFiles) {
-        const text = await readFileAsText(f);
-        const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-        // Drop trailing blank lines.
-        while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
-        if (lines.length === 0) continue;
+      for (const g of groups) {
+        const size = effSize(g);
+        const serial = effSerial(g);
+        for (const f of g.files) {
+          const text = await readFileAsText(f);
+          const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+          while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+          if (lines.length === 0) continue;
 
-        if (header === null) {
-          header = lines[0];
-          dataLines.push(...lines.slice(1));
-        } else {
-          dataLines.push(...lines.slice(1));
+          if (header === null) {
+            header = 'Size,SerialNumber,' + lines[0];
+          }
+          for (const line of lines.slice(1)) {
+            if (line.trim() === '') continue;
+            dataLines.push(size + ',' + serial + ',' + line);
+          }
+          fileCount++;
         }
       }
 
@@ -465,7 +551,7 @@
       const combined = [header, ...dataLines].join('\n') + '\n';
       const blob = new Blob([combined], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
-      const outName = effectiveSize() + '_' + effectiveSerial() + '_' + todayYYMMDD() + '.csv';
+      const outName = (outNameInput.value.trim() || computeDefaultOutName());
 
       const a = document.createElement('a');
       a.href = url;
@@ -478,12 +564,13 @@
       globalNotice.className = 'notice show';
       globalNotice.style.background = '#ecfdf5';
       globalNotice.style.color = '#16a34a';
-      globalNotice.textContent = 'Done — downloaded ' + outName + ' (' + state.sdcFiles.length + ' files, ' + dataLines.length + ' data rows).';
+      globalNotice.textContent = 'Done — downloaded ' + outName + ' (' + groups.length + ' folders, ' + fileCount + ' files, ' + dataLines.length + ' data rows).';
     } catch (err) {
       showNotice('err', 'Something went wrong while combining: ' + err.message);
     } finally {
       combineBtn.disabled = false;
       combineBtn.textContent = 'Combine & Download';
+      updateCombineState();
     }
   }
 })();
