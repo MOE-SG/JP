@@ -3,7 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SDC Combiner</title>
+<title>JP Pressure</title>
+<meta name="description" content="Combine JetPulse SDC/ACC pressure-test CSVs, extract Size/SN, apply pass/fail QC criteria, and export CSV/Excel/HTML reports.">
+
+<!-- PWA: installable app metadata -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="JP Pressure">
+
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
   :root {
     --bg: #f5f6f8;
@@ -13,11 +26,16 @@
     --muted: #6b7280;
     --accent: #2563eb;
     --accent-hover: #1d4ed8;
+    --accent-bg: #eff4ff;
     --ok: #16a34a;
+    --ok-bg: #ecfdf5;
     --warn: #b45309;
     --warn-bg: #fffbeb;
     --err: #dc2626;
     --err-bg: #fef2f2;
+    --meta-bg: #f0f9ff;
+    --meta-text: #0369a1;
+    --stripe: #fafbfc;
   }
   * { box-sizing: border-box; }
   body {
@@ -29,23 +47,16 @@
     display: flex;
     justify-content: center;
   }
+  .wrap { max-width: 1100px; width: 100%; }
   .card {
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 1.75rem;
-    max-width: 760px;
     width: 100%;
   }
-  h1 {
-    font-size: 1.25rem;
-    margin: 0 0 0.25rem;
-  }
-  .sub {
-    color: var(--muted);
-    font-size: 0.9rem;
-    margin: 0 0 1.5rem;
-  }
+  h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
+  .sub { color: var(--muted); font-size: 0.9rem; margin: 0 0 1.5rem; }
   .dropzone {
     border: 2px dashed var(--border);
     border-radius: 8px;
@@ -54,17 +65,9 @@
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
   }
-  .dropzone:hover, .dropzone.drag {
-    border-color: var(--accent);
-    background: #f0f5ff;
-  }
-  .dropzone p {
-    margin: 0.25rem 0;
-    color: var(--muted);
-  }
-  .dropzone strong {
-    color: var(--text);
-  }
+  .dropzone:hover, .dropzone.drag { border-color: var(--accent); background: #f0f5ff; }
+  .dropzone p { margin: 0.25rem 0; color: var(--muted); }
+  .dropzone strong { color: var(--text); }
   input[type="file"] { display: none; }
   button {
     font: inherit;
@@ -77,175 +80,94 @@
     font-weight: 600;
   }
   button:hover { background: var(--accent-hover); }
-  button:disabled {
-    background: #b8c2d1;
-    cursor: not-allowed;
+  button:disabled { background: #b8c2d1; cursor: not-allowed; }
+  .section { margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+  .row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.35rem 0; font-size: 0.92rem;
   }
-  .section {
-    margin-top: 1.5rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--border);
-  }
-  .summary-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.35rem 0;
-    font-size: 0.92rem;
-  }
-  .summary-row .label { color: var(--muted); }
-  .summary-row .val { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .row .label { color: var(--muted); }
+  .row .val { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .badge {
-    display: inline-block;
-    font-size: 0.72rem;
-    padding: 0.1rem 0.5rem;
-    border-radius: 999px;
-    font-weight: 600;
-    white-space: nowrap;
+    display: inline-block; font-size: 0.75rem; padding: 0.1rem 0.5rem;
+    border-radius: 999px; font-weight: 600;
   }
-  .badge.ok { background: #ecfdf5; color: var(--ok); }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
   .badge.warn { background: var(--warn-bg); color: var(--warn); }
   .badge.err { background: var(--err-bg); color: var(--err); }
-  .groups {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin-top: 0.75rem;
+  .manual { margin-top: 0.75rem; display: none; align-items: center; gap: 0.5rem; }
+  .manual.show { display: flex; }
+  .manual label { font-size: 0.85rem; color: var(--warn); font-weight: 600; }
+  .manual input {
+    font: inherit; padding: 0.4rem 0.6rem; border: 1px solid var(--border);
+    border-radius: 6px; width: 8rem;
   }
-  .group {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  .group-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.6rem 0.8rem;
-    background: #fafbfc;
-    cursor: pointer;
-  }
-  .group-head .name {
-    font-weight: 600;
-    font-size: 0.88rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .group-head .meta {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    flex: none;
-    font-size: 0.78rem;
-    color: var(--muted);
-  }
-  .group-body {
-    padding: 0.7rem 0.8rem;
-    border-top: 1px solid var(--border);
-    display: none;
-  }
-  .group.open .group-body { display: block; }
-  .group.open .chevron { transform: rotate(90deg); }
-  .chevron {
-    display: inline-block;
-    transition: transform 0.15s;
-    color: var(--muted);
-    flex: none;
-  }
-  .manual-row {
-    display: none;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-  .manual-row.show { display: flex; }
-  .manual-row label {
-    font-size: 0.82rem;
-    color: var(--warn);
-    font-weight: 600;
-    flex: none;
-    width: 6.5rem;
-  }
-  .manual-row input {
-    font: inherit;
-    padding: 0.35rem 0.55rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    width: 8rem;
-    font-size: 0.85rem;
-  }
-  .filelist {
-    max-height: 180px;
-    overflow-y: auto;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    margin-top: 0.4rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.8rem;
-  }
-  .filelist div {
-    padding: 0.28rem 0.55rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .filelist div:last-child { border-bottom: none; }
-  .filelist .idx { color: var(--muted); margin-right: 0.4rem; }
   .notice {
-    margin-top: 0.75rem;
-    padding: 0.6rem 0.8rem;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    display: none;
+    margin-top: 0.75rem; padding: 0.6rem 0.8rem; border-radius: 6px;
+    font-size: 0.85rem; display: none;
   }
   .notice.show { display: block; }
   .notice.warn { background: var(--warn-bg); color: var(--warn); }
   .notice.err { background: var(--err-bg); color: var(--err); }
-  .outname-row {
-    margin-top: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .outname-row label {
-    font-size: 0.85rem;
-    color: var(--muted);
-    flex: none;
-  }
-  .outname-row input {
-    font: inherit;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.85rem;
-    padding: 0.4rem 0.6rem;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    flex: 1;
-    min-width: 0;
-  }
-  .actions {
-    margin-top: 1rem;
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-  }
+  .notice.ok { background: var(--ok-bg); color: var(--ok); }
+  .actions { margin-top: 1.5rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; }
+  .outname { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; color: var(--muted); }
   .reset {
-    background: none;
-    color: var(--muted);
-    text-decoration: underline;
-    font-weight: 400;
-    padding: 0.3rem 0;
+    background: none; color: var(--muted); text-decoration: underline;
+    font-weight: 400; padding: 0.3rem 0;
   }
   .reset:hover { background: none; color: var(--text); }
+
+  .stats { display: flex; gap: 1.25rem; flex-wrap: wrap; margin-top: 0.5rem; }
+  .stat { font-size: 0.85rem; }
+  .stat .n { font-weight: 700; font-size: 1.05rem; color: var(--accent); }
+  .stat .l { color: var(--muted); display: block; }
+
+  .tablewrap {
+    margin-top: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+  table.preview { border-collapse: collapse; font-size: 0.78rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  table.preview th, table.preview td { padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); border-right: 1px solid #eef0f2; text-align: left; }
+  table.preview thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--panel); border-bottom: 2px solid var(--border);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted);
+  }
+  table.preview thead th.meta { background: var(--meta-bg); color: var(--meta-text); }
+  table.preview tbody td.meta { background: var(--meta-bg); color: var(--meta-text); font-weight: 600; }
+  table.preview tbody tr:nth-child(even) td:not(.meta):not(.cell-fail):not(.result-fail):not(.result-pass) { background: var(--stripe); }
+  table.preview tbody tr:hover td:not(.meta):not(.cell-fail):not(.result-fail):not(.result-pass) { background: #eef4ff; }
+  table.preview td.cell-fail { background: var(--err-bg); color: var(--err); font-weight: 700; }
+  table.preview td.result-pass { background: var(--ok-bg); color: var(--ok); font-weight: 700; text-align: center; }
+  table.preview td.result-fail { background: var(--err-bg); color: var(--err); font-weight: 700; text-align: center; }
+  .more-rows { padding: 0.6rem 0.8rem; font-size: 0.8rem; color: var(--muted); border-top: 1px solid var(--border); }
+  .criteria {
+    margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted);
+    background: #fafbfc; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.8rem;
+  }
+  .criteria strong { color: var(--text); }
+  h2.section-title { font-size: 1rem; margin: 0 0 0.5rem; }
+  .summary-note { margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--warn); display: none; }
+  .summary-note.show { display: block; }
 </style>
 </head>
 <body>
-
+<div class="wrap">
 <div class="card">
-  <h1>SDC Combiner</h1>
-  <p class="sub">Select a folder anywhere above your test folders. Every <strong>SDC</strong> subfolder found inside it (at any depth) will be scanned. Each file gets tagged with the <strong>Size</strong> and <strong>serial number</strong> read from the folder one level above its <strong>ACC</strong>/<strong>SDC</strong> pair, then everything is appended into one CSV with those two columns added at the front. <code>combined_SDC.csv</code>-style files are skipped automatically.</p>
+  <h1>JP Pressure</h1>
+  <p class="sub">Select the test folder (the one containing <strong>ACC</strong> and <strong>SDC</strong>). Every <code>PulserDiag*.csv</code> in SDC is paired by order with the matching ACC file, tagged with Size and SN, and shown below as a preview before download.</p>
+
+  <!-- Filled in by renderCriteriaDescription() from CRITERIA_CONFIG at load time,
+       so this text can never drift out of sync with the actual rules below. -->
+  <p class="criteria" id="criteriaText"></p>
 
   <div class="dropzone" id="dropzone">
-    <p><strong>Click to choose a folder</strong></p>
+    <p><strong>Click to choose the test folder</strong></p>
     <p>or drag a folder here</p>
     <input type="file" id="folderInput" webkitdirectory directory multiple>
   </div>
@@ -253,52 +175,268 @@
   <div class="notice" id="globalNotice"></div>
 
   <div class="section" id="resultSection" style="display:none;">
-    <div class="summary-row">
-      <span class="label">Test folders found (with an SDC subfolder)</span>
-      <span class="val" id="groupCount">0</span>
-    </div>
-    <div class="summary-row">
-      <span class="label">Total CSV files</span>
-      <span class="val" id="totalFiles">0</span>
-    </div>
-
-    <div class="groups" id="groupsEl"></div>
-
-    <div class="outname-row">
-      <label for="outNameInput">Output file</label>
-      <input type="text" id="outNameInput">
-    </div>
-
     <div class="actions">
-      <button id="combineBtn" disabled>Combine &amp; Download</button>
+      <button id="downloadCsvBtn" disabled>Download CSV</button>
+      <button id="downloadExcelBtn" disabled>Download Excel (.xlsx)</button>
+      <button id="downloadHtmlBtn" disabled>Download HTML Report</button>
       <button class="reset" id="resetBtn" type="button">Choose a different folder</button>
     </div>
+    <p class="outname" id="outName"></p>
+
+    <div class="row" style="margin-top: 1rem;">
+      <span class="label">Selected folder</span>
+      <span class="val" id="folderName">—</span>
+    </div>
+    <div class="row">
+      <span class="label">Size</span>
+      <span class="val"><span id="sizeVal">—</span> <span class="badge" id="sizeBadge"></span></span>
+    </div>
+    <div class="manual" id="sizeManualWrap">
+      <label for="sizeManual">Size not detected — enter it:</label>
+      <input type="text" id="sizeManual" placeholder="e.g. 6.75">
+    </div>
+    <div class="row">
+      <span class="label">Serial number (SN, 8 digits)</span>
+      <span class="val"><span id="serialVal">—</span> <span class="badge" id="serialBadge"></span></span>
+    </div>
+    <div class="manual" id="serialManualWrap">
+      <label for="serialManual">SN not detected — enter it:</label>
+      <input type="text" id="serialManual" placeholder="8 digits" maxlength="8">
+    </div>
+
+    <div class="stats">
+      <div class="stat"><span class="n" id="statPulser">0</span><span class="l">PulserDiag files</span></div>
+      <div class="stat"><span class="n" id="statAcc">0</span><span class="l">ACC files</span></div>
+      <div class="stat"><span class="n" id="statRows">0</span><span class="l">Combined rows</span></div>
+      <div class="stat"><span class="n" id="statCols">0</span><span class="l">Data columns</span></div>
+    </div>
+
+    <div class="section" id="summarySection" style="display:none;">
+      <h2 class="section-title">Pass/Fail Summary (by pressure step)</h2>
+      <div class="tablewrap" id="summaryTableWrap">
+        <table class="preview" id="summaryTable"></table>
+      </div>
+      <p class="summary-note" id="summaryNote"></p>
+    </div>
+
+    <div class="tablewrap" id="tableWrap" style="display:none;">
+      <table class="preview" id="previewTable"></table>
+    </div>
   </div>
+</div>
 </div>
 
 <script>
 (function () {
+
+  // ===========================================================================
+  // CONFIGURATION - pass/fail criteria
+  // ===========================================================================
+  // This is the ONE place to edit when the QC criteria change. Every rule here
+  // is picked up automatically by:
+  //   - the per-cell highlighting in the on-screen data table
+  //   - the Result (Pass/Fail) column
+  //   - the pressure-step Pass/Fail summary table
+  //   - the "Fail criteria" description text at the top of the page
+  //   - all three downloads (CSV / Excel / HTML report)
+  // Column names must match a PulserDiag CSV header EXACTLY (case-sensitive).
+  // A rule referencing a column that isn't present in a given file is simply
+  // skipped for that file - it will not error out.
+  // ===========================================================================
+  const CRITERIA_CONFIG = {
+
+    // --- Rule type 1: NONZERO ---------------------------------------------
+    // Fails if the column's value is anything other than exactly 0.
+    nonzero: [
+      'SerialNoResponse',
+      'ErrorOpen',
+      'ErrorClose',
+      'HighCurrent',
+      'ErrorBoth',
+      'LowCapVolt'
+      // Add another column name above (with a trailing comma on the line
+      // before it) to fail it whenever its value isn't 0.
+    ],
+
+    // --- Rule type 2: EQUAL PAIRS -------------------------------------------
+    // Both columns in a pair must match exactly, or both cells fail.
+    equalPairs: [
+      ['GoodPulses', 'TotalPulses'],
+      ['CurrGoodPulses', 'CurrTotalPulses']
+      // Add another ['ColumnA', 'ColumnB'] pair above to require they always match.
+    ],
+
+    // --- Rule type 3: RANGE (upper / lower limit) ---------------------------
+    // Fails if the column's value is below `min` and/or above `max`.
+    // Set either bound to `null` to skip that side of the check.
+    range: [
+      { column: 'AverageEnergy', min: null, max: 120 } // fails only if > 120
+      // Two more examples to copy when adding real limits later:
+      // { column: 'MinInitialVolt', min: 80, max: null },   // fails only if < 80
+      // { column: 'MinFinalVolt',   min: 50, max: 95   },   // fails if < 50 OR > 95
+    ]
+  };
+
+  // Evaluates one combined row against CRITERIA_CONFIG above.
+  // Returns { result: 'Pass'|'Fail', failCells: Set<columnName> } - failCells
+  // is which specific cells to highlight; `result` is Fail if that set is non-empty.
+  function evaluateRow(obj) {
+    const failCells = new Set();
+
+    CRITERIA_CONFIG.nonzero.forEach((col) => {
+      if (!(col in obj)) return;
+      const v = parseFloat(obj[col]);
+      if (!isNaN(v) && v !== 0) failCells.add(col);
+    });
+
+    CRITERIA_CONFIG.equalPairs.forEach(([colA, colB]) => {
+      if (!(colA in obj) || !(colB in obj)) return;
+      const a = parseFloat(obj[colA]), b = parseFloat(obj[colB]);
+      if (!isNaN(a) && !isNaN(b) && a !== b) { failCells.add(colA); failCells.add(colB); }
+    });
+
+    CRITERIA_CONFIG.range.forEach(({ column, min, max }) => {
+      if (!(column in obj)) return;
+      const v = parseFloat(obj[column]);
+      if (isNaN(v)) return;
+      const belowMin = min !== null && min !== undefined && v < min;
+      const aboveMax = max !== null && max !== undefined && v > max;
+      if (belowMin || aboveMax) failCells.add(column);
+    });
+
+    return { result: failCells.size > 0 ? 'Fail' : 'Pass', failCells };
+  }
+
+  // Builds the human-readable "Fail criteria: ..." sentence straight from
+  // CRITERIA_CONFIG, so the on-page description can never drift out of sync
+  // with the rules actually being applied.
+  function criteriaDescriptionHtml() {
+    const parts = [];
+
+    if (CRITERIA_CONFIG.nonzero.length) {
+      parts.push('any non-zero value in ' + CRITERIA_CONFIG.nonzero.join(', '));
+    }
+    CRITERIA_CONFIG.equalPairs.forEach(([a, b]) => parts.push(escapeHtml(a) + ' &ne; ' + escapeHtml(b)));
+    CRITERIA_CONFIG.range.forEach(({ column, min, max }) => {
+      const hasMin = min !== null && min !== undefined;
+      const hasMax = max !== null && max !== undefined;
+      if (hasMin && hasMax) parts.push(escapeHtml(column) + ' outside ' + min + '&ndash;' + max);
+      else if (hasMax) parts.push(escapeHtml(column) + ' &gt; ' + max);
+      else if (hasMin) parts.push(escapeHtml(column) + ' &lt; ' + min);
+    });
+
+    return '<strong>Fail criteria:</strong> ' + parts.join(' &middot; ') +
+      '. A row failing any of these is marked <strong>Fail</strong>; a pressure step (up/down) is Fail if any of its rows fail.';
+  }
+
+
+  // ===========================================================================
+  // DOM REFERENCES
+  // ===========================================================================
   const folderInput = document.getElementById('folderInput');
   const dropzone = document.getElementById('dropzone');
   const resultSection = document.getElementById('resultSection');
   const globalNotice = document.getElementById('globalNotice');
-  const groupCountEl = document.getElementById('groupCount');
-  const totalFilesEl = document.getElementById('totalFiles');
-  const groupsEl = document.getElementById('groupsEl');
-  const outNameInput = document.getElementById('outNameInput');
-  const combineBtn = document.getElementById('combineBtn');
+  const criteriaTextEl = document.getElementById('criteriaText');
+  const folderNameEl = document.getElementById('folderName');
+  const sizeValEl = document.getElementById('sizeVal');
+  const sizeBadgeEl = document.getElementById('sizeBadge');
+  const sizeManualWrap = document.getElementById('sizeManualWrap');
+  const sizeManualInput = document.getElementById('sizeManual');
+  const serialValEl = document.getElementById('serialVal');
+  const serialBadgeEl = document.getElementById('serialBadge');
+  const serialManualWrap = document.getElementById('serialManualWrap');
+  const serialManualInput = document.getElementById('serialManual');
+  const statPulserEl = document.getElementById('statPulser');
+  const statAccEl = document.getElementById('statAcc');
+  const statRowsEl = document.getElementById('statRows');
+  const statColsEl = document.getElementById('statCols');
+  const tableWrap = document.getElementById('tableWrap');
+  const previewTable = document.getElementById('previewTable');
+  const summarySection = document.getElementById('summarySection');
+  const summaryTable = document.getElementById('summaryTable');
+  const summaryNote = document.getElementById('summaryNote');
+  const downloadCsvBtn = document.getElementById('downloadCsvBtn');
+  const downloadExcelBtn = document.getElementById('downloadExcelBtn');
+  const downloadHtmlBtn = document.getElementById('downloadHtmlBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const outNameEl = document.getElementById('outName');
 
-  // Each group = one folder that sits directly above an SDC (and, normally, ACC) subfolder.
-  // { id, parentPath, parentName, size, serial, manualSize, manualSerial, files: [File...] }
-  let groups = [];
-  let outNameTouched = false;
+  criteriaTextEl.innerHTML = criteriaDescriptionHtml();
 
+
+  // ===========================================================================
+  // APP STATE
+  // ===========================================================================
+  const DEFAULT_META_COLS = ['PulserDiagFile', 'ACCFile', 'Direction', 'Pressure', 'Size', 'SN', 'Result'];
+
+  let state = {
+    folderName: '',
+    size: null,
+    serial: null,
+    accFiles: [],
+    pulserFiles: [],
+    metaCols: DEFAULT_META_COLS.slice(),
+    dataCols: [],
+    rows: [] // array of plain objects keyed by metaCols + dataCols
+  };
+
+  // Holds every PulserDiag file's parsed { fileName, header, rows } - kept
+  // separately from `state` because rebuildRows() re-derives `state.rows`
+  // from this each time Size/SN is edited manually, without re-reading files.
+  let parsedFiles = [];
+
+
+  // ===========================================================================
+  // SMALL UTILITIES
+  // ===========================================================================
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function csvEscape(v) {
+    const s = String(v ?? '');
+    if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+  function extractSize(name) {
+    const m = name.match(/^(\d+(?:\.\d+)?)/);
+    return m ? m[1] : null;
+  }
+  function extractSerial(name) {
+    const m = name.match(/(?<!\d)(\d{8})(?!\d)/);
+    return m ? m[1] : null;
+  }
+  function todayYYMMDD() {
+    const d = new Date();
+    return String(d.getFullYear()).slice(-2) + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
+  }
+  // Very small CSV line splitter - fine for these simple, unquoted PulserDiag exports.
+  function splitCsvLine(line) {
+    return line.split(',').map((c) => c.trim());
+  }
+  // Reads the direction + pressure step out of an ACC filename like
+  // "2026-09-19-09-47-54 up 10k.csv" -> { direction: 'up', pressure: '10k' }.
+  function parseAccMeta(accName) {
+    if (!accName || accName === 'no file') return null;
+    const m = accName.match(/(up|dn|down)\s+([a-z0-9.]+)\.csv$/i);
+    if (!m) return null;
+    const dirToken = m[1].toLowerCase();
+    const direction = (dirToken === 'dn' || dirToken === 'down') ? 'down' : 'up';
+    const pressure = m[2].toLowerCase();
+    return { direction, pressure };
+  }
+  function pressureSortKey(p) {
+    if (p === 'amb') return -1;
+    const v = parseFloat(String(p).replace(/k$/i, ''));
+    return isNaN(v) ? 999999 : v;
+  }
+
+
+  // ===========================================================================
+  // EVENT WIRING
+  // ===========================================================================
   dropzone.addEventListener('click', () => folderInput.click());
-  dropzone.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropzone.classList.add('drag');
-  });
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
   dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
   dropzone.addEventListener('drop', (e) => {
     e.preventDefault();
@@ -308,200 +446,107 @@
 
   folderInput.addEventListener('change', handleFiles);
   resetBtn.addEventListener('click', resetAll);
-  combineBtn.addEventListener('click', combineAndDownload);
-  outNameInput.addEventListener('input', () => { outNameTouched = true; });
+  sizeManualInput.addEventListener('input', () => { rebuildRows(); render(); });
+  serialManualInput.addEventListener('input', () => { rebuildRows(); render(); });
+  downloadCsvBtn.addEventListener('click', downloadCsvReport);
+  downloadExcelBtn.addEventListener('click', downloadExcelReport);
+  downloadHtmlBtn.addEventListener('click', downloadHtmlReport);
 
   function showNotice(kind, msg) {
     globalNotice.className = 'notice show ' + kind;
-    globalNotice.style.background = '';
-    globalNotice.style.color = '';
     globalNotice.textContent = msg;
   }
   function clearNotice() {
     globalNotice.className = 'notice';
-    globalNotice.style.background = '';
-    globalNotice.style.color = '';
     globalNotice.textContent = '';
   }
 
   function resetAll() {
     folderInput.value = '';
-    groups = [];
-    outNameTouched = false;
+    state = { folderName: '', size: null, serial: null, accFiles: [], pulserFiles: [], metaCols: DEFAULT_META_COLS.slice(), dataCols: [], rows: [] };
+    // parsedFiles holds every PulserDiag file's full text content in memory - clear it
+    // explicitly on reset so repeated runs in the same tab don't accumulate memory.
+    parsedFiles = [];
+    previewTable.innerHTML = '';
+    summaryTable.innerHTML = '';
+    summarySection.style.display = 'none';
     resultSection.style.display = 'none';
+    tableWrap.style.display = 'none';
     clearNotice();
   }
 
-  function extractSize(name) {
-    // Folder name starts with the size: e.g. "4.75", "6.75", "8", followed by a space or letter.
-    const m = name.match(/^(\d+(?:\.\d+)?)/);
-    return m ? m[1] : null;
-  }
-  function extractSerial(name) {
-    // A run of exactly 8 consecutive digits, not part of a longer digit run.
-    const m = name.match(/(?<!\d)(\d{8})(?!\d)/);
-    return m ? m[1] : null;
-  }
-  function todayYYMMDD() {
-    const d = new Date();
-    const yy = String(d.getFullYear()).slice(-2);
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    return yy + mm + dd;
-  }
+  // ===========================================================================
+  // FOLDER SELECTION - scanning and validating the picked folder
+  // ===========================================================================
+  // Selecting a folder far above the actual test folder (e.g. the whole
+  // results tree) makes the browser enumerate everything underneath before
+  // our code even runs - that's unavoidable. What we CAN do is refuse to
+  // process it: bail out early if the pick looks way bigger than one test
+  // folder should be, and only ever look at files exactly 2 levels down
+  // (<selected folder>/ACC/... or <selected folder>/SDC/...) rather than
+  // anywhere a folder happens to be named ACC or SDC.
+  const MAX_EXPECTED_FILES = 500;
 
-  function handleFiles(e) {
+  async function handleFiles(e) {
     clearNotice();
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Group files by the folder that sits directly above their SDC folder.
-    const map = new Map(); // parentPath -> group
-    let sdcFolderSeen = false;
-
-    files.forEach((f) => {
-      const rel = f.webkitRelativePath || f.name;
-      const parts = rel.split('/');
-      const folderParts = parts.slice(0, -1); // drop the filename itself
-
-      // Use the deepest folder segment literally named "SDC" (closest to the file).
-      let sdcIdx = -1;
-      for (let i = folderParts.length - 1; i >= 0; i--) {
-        if (folderParts[i].toUpperCase() === 'SDC') { sdcIdx = i; break; }
-      }
-      if (sdcIdx === -1) return; // this file isn't inside any SDC folder
-      sdcFolderSeen = true;
-
-      if (!/\.csv$/i.test(f.name)) return;
-      if (/^combined/i.test(f.name)) return;
-
-      const parentIdx = sdcIdx - 1;
-      const parentPath = parentIdx >= 0 ? folderParts.slice(0, parentIdx + 1).join('/') : folderParts.slice(0, sdcIdx + 1).join('/');
-      const parentName = parentIdx >= 0 ? folderParts[parentIdx] : '(folder above SDC not in selection)';
-
-      if (!map.has(parentPath)) {
-        map.set(parentPath, {
-          id: parentPath,
-          parentPath,
-          parentName,
-          size: extractSize(parentName),
-          serial: extractSerial(parentName),
-          manualSize: '',
-          manualSerial: '',
-          files: []
-        });
-      }
-      map.get(parentPath).files.push(f);
-    });
-
-    groups = Array.from(map.values()).filter((g) => g.files.length > 0);
-    // Sort files within each group ascending by filename, and sort groups by folder name.
-    groups.forEach((g) => g.files.sort((a, b) => a.name.localeCompare(b.name)));
-    groups.sort((a, b) => a.parentName.localeCompare(b.parentName));
-
-    if (!sdcFolderSeen) {
-      showNotice('err', 'No folder named "SDC" was found anywhere inside the selected folder.');
-      resultSection.style.display = 'none';
-      return;
-    }
-    if (groups.length === 0) {
-      showNotice('err', 'SDC folder(s) were found, but none contained usable CSV files (after skipping "combined..." files).');
+    if (files.length > MAX_EXPECTED_FILES) {
+      showNotice('err',
+        'You selected ' + files.length + ' files - that looks like more than one test folder ' +
+        '(a single ACC + SDC folder is normally well under ' + MAX_EXPECTED_FILES + '). ' +
+        'To avoid freezing the page, please pick the specific test folder itself (the one directly containing ACC and SDC), not a parent folder above it.');
+      folderInput.value = '';
       resultSection.style.display = 'none';
       return;
     }
 
-    outNameTouched = false;
-    render();
-  }
+    const firstPath = files[0].webkitRelativePath || files[0].name;
+    const rootFolder = firstPath.split('/')[0];
 
-  function effSize(g) { return g.size || (g.manualSize || '').trim() || null; }
-  function effSerial(g) { return g.serial || (g.manualSerial || '').trim() || null; }
+    // Exactly 2 levels down from the selected folder: <root>/ACC/<file> or
+    // <root>/SDC/<file>. Anything nested deeper, or an ACC/SDC folder found
+    // further down the tree, is ignored.
+    const inFolder = (f, folderName) => {
+      const parts = (f.webkitRelativePath || '').split('/');
+      return parts.length === 3 && parts[1].toUpperCase() === folderName;
+    };
 
-  function computeDefaultOutName() {
-    if (groups.length === 1) {
-      const g = groups[0];
-      const size = effSize(g), serial = effSerial(g);
-      if (size && serial) return size + '_' + serial + '_' + todayYYMMDD() + '.csv';
+    const accFiles = files
+      .filter((f) => inFolder(f, 'ACC') && /\.csv$/i.test(f.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const pulserFiles = files
+      .filter((f) => inFolder(f, 'SDC') && /^pulserdiag.*\.csv$/i.test(f.name))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    if (pulserFiles.length === 0) {
+      showNotice('err', 'No "PulserDiag*.csv" files found directly under an SDC subfolder inside "' + rootFolder + '". Make sure you selected the test folder itself (the one directly containing ACC and SDC, not a folder above it).');
+      resultSection.style.display = 'none';
+      return;
     }
-    return 'SDC_Combined_' + todayYYMMDD() + '.csv';
-  }
+    if (accFiles.length === 0) {
+      showNotice('warn', 'No CSV files found under ACC — ACCFile will be recorded as "no file" for every row. You can still proceed.');
+    }
 
-  function render() {
+    state.folderName = rootFolder;
+    state.accFiles = accFiles;
+    state.pulserFiles = pulserFiles;
+    state.size = extractSize(rootFolder);
+    state.serial = extractSerial(rootFolder);
+
+    downloadCsvBtn.disabled = true;
+    downloadExcelBtn.disabled = true;
+    downloadHtmlBtn.disabled = true;
     resultSection.style.display = 'block';
-    groupCountEl.textContent = groups.length;
-    totalFilesEl.textContent = groups.reduce((n, g) => n + g.files.length, 0);
 
-    groupsEl.innerHTML = '';
-    groups.forEach((g) => {
-      const el = document.createElement('div');
-      el.className = 'group';
-
-      const sizeOk = !!g.size;
-      const serialOk = !!g.serial;
-      const sizeBadge = sizeOk ? '<span class="badge ok">size ' + g.size + '</span>' : '<span class="badge warn">size missing</span>';
-      const serialBadge = serialOk ? '<span class="badge ok">serial ' + g.serial + '</span>' : '<span class="badge warn">serial missing</span>';
-
-      el.innerHTML =
-        '<div class="group-head">' +
-          '<span class="chevron">&#9656;</span>' +
-          '<span class="name" title="' + g.parentName + '">' + g.parentName + '</span>' +
-          '<span class="meta">' + g.files.length + ' files ' + sizeBadge + ' ' + serialBadge + '</span>' +
-        '</div>' +
-        '<div class="group-body"></div>';
-
-      const body = el.querySelector('.group-body');
-
-      const sizeManualRow = document.createElement('div');
-      sizeManualRow.className = 'manual-row' + (sizeOk ? '' : ' show');
-      sizeManualRow.innerHTML = '<label>Size:</label><input type="text" placeholder="e.g. 6.75" value="' + g.manualSize + '">';
-      const sizeManualInput = sizeManualRow.querySelector('input');
-      sizeManualInput.addEventListener('input', () => { g.manualSize = sizeManualInput.value; updateGroupBadges(); updateCombineState(); });
-
-      const serialManualRow = document.createElement('div');
-      serialManualRow.className = 'manual-row' + (serialOk ? '' : ' show');
-      serialManualRow.innerHTML = '<label>Serial:</label><input type="text" placeholder="8 digits" maxlength="8" value="' + g.manualSerial + '">';
-      const serialManualInput = serialManualRow.querySelector('input');
-      serialManualInput.addEventListener('input', () => { g.manualSerial = serialManualInput.value; updateGroupBadges(); updateCombineState(); });
-
-      const fileList = document.createElement('div');
-      fileList.className = 'filelist';
-      g.files.forEach((f, i) => {
-        const row = document.createElement('div');
-        row.innerHTML = '<span class="idx">' + (i + 1) + '.</span>' + f.name;
-        fileList.appendChild(row);
-      });
-
-      body.appendChild(sizeManualRow);
-      body.appendChild(serialManualRow);
-      body.appendChild(fileList);
-
-      el.querySelector('.group-head').addEventListener('click', () => el.classList.toggle('open'));
-
-      // Keep references for badge updates.
-      el._sizeBadgeGetter = () => (effSize(g) ? '<span class="badge ok">size ' + effSize(g) + '</span>' : '<span class="badge warn">size missing</span>');
-      el._serialBadgeGetter = () => (effSerial(g) ? '<span class="badge ok">serial ' + effSerial(g) + '</span>' : '<span class="badge warn">serial missing</span>');
-      el._metaEl = el.querySelector('.meta');
-      el._fileCount = g.files.length;
-      g._el = el;
-
-      groupsEl.appendChild(el);
-    });
-
-    outNameInput.value = computeDefaultOutName();
-    updateCombineState();
-  }
-
-  function updateGroupBadges() {
-    groups.forEach((g) => {
-      if (!g._el) return;
-      g._el._metaEl.innerHTML = g._el._fileCount + ' files ' + g._el._sizeBadgeGetter() + ' ' + g._el._serialBadgeGetter();
-    });
-    if (!outNameTouched) outNameInput.value = computeDefaultOutName();
-  }
-
-  function updateCombineState() {
-    const allResolved = groups.every((g) => effSize(g) && effSerial(g));
-    combineBtn.disabled = !allResolved;
+    try {
+      await buildRows();
+      render();
+    } catch (err) {
+      showNotice('err', 'Something went wrong while reading the files: ' + err.message);
+    }
   }
 
   function readFileAsText(file) {
@@ -513,67 +558,470 @@
     });
   }
 
-  async function combineAndDownload() {
-    clearNotice();
-    combineBtn.disabled = true;
-    combineBtn.textContent = 'Combining…';
+  // ===========================================================================
+  // ROW BUILDING - reading PulserDiag CSVs and combining them with ACC/QC data
+  // ===========================================================================
+  async function buildRows() {
+    parsedFiles = [];
+    for (const f of state.pulserFiles) {
+      const text = await readFileAsText(f);
+      const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+      while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+      if (lines.length === 0) { parsedFiles.push({ fileName: f.name, header: [], rows: [] }); continue; }
 
-    try {
-      let header = null;
-      const dataLines = [];
-      let fileCount = 0;
+      const header = splitCsvLine(lines[0]);
+      const rows = lines.slice(1).filter((l) => l.trim() !== '').map(splitCsvLine);
+      parsedFiles.push({ fileName: f.name, header, rows });
+    }
+    rebuildRows();
+  }
 
-      for (const g of groups) {
-        const size = effSize(g);
-        const serial = effSerial(g);
-        for (const f of g.files) {
-          const text = await readFileAsText(f);
-          const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-          while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
-          if (lines.length === 0) continue;
+  function rebuildRows() {
+    const size = effectiveSize();
+    const serial = effectiveSerial();
 
-          if (header === null) {
-            header = 'Size,SerialNumber,' + lines[0];
-          }
-          for (const line of lines.slice(1)) {
-            if (line.trim() === '') continue;
-            dataLines.push(size + ',' + serial + ',' + line);
-          }
-          fileCount++;
+    // Union of data columns across all PulserDiag files, in first-seen order.
+    const dataCols = [];
+    const seen = new Set();
+    parsedFiles.forEach((pf) => {
+      pf.header.forEach((h) => {
+        if (h && !seen.has(h)) { seen.add(h); dataCols.push(h); }
+      });
+    });
+    state.dataCols = dataCols;
+
+    const rows = [];
+    parsedFiles.forEach((pf, idx) => {
+      const accName = idx < state.accFiles.length ? state.accFiles[idx].name : 'no file';
+      const accMeta = parseAccMeta(accName);
+      pf.rows.forEach((cells) => {
+        const obj = {
+          PulserDiagFile: pf.fileName,
+          ACCFile: accName,
+          Direction: accMeta ? (accMeta.direction === 'up' ? 'Up' : 'Down') : '',
+          Pressure: accMeta ? accMeta.pressure : '',
+          Size: size || '',
+          SN: serial || ''
+        };
+        pf.header.forEach((h, i) => { obj[h] = cells[i] !== undefined ? cells[i] : ''; });
+        // Fill any column this file didn't have (from a differently-shaped file) with blank.
+        dataCols.forEach((c) => { if (!(c in obj)) obj[c] = ''; });
+
+        const { result, failCells } = evaluateRow(obj);
+        obj.Result = result;
+        obj.__failCells = failCells; // not a real column - excluded from cols lists and CSV export
+
+        rows.push(obj);
+      });
+    });
+    state.rows = rows;
+  }
+
+  function effectiveSize() {
+    if (state.size) return state.size;
+    const v = sizeManualInput.value.trim();
+    return v || null;
+  }
+  function effectiveSerial() {
+    if (state.serial) return state.serial;
+    const v = serialManualInput.value.trim();
+    return v || null;
+  }
+
+  // ===========================================================================
+  // RENDERING - on-page preview (data table + pass/fail summary table)
+  // ===========================================================================
+  function render() {
+    folderNameEl.textContent = state.folderName;
+
+    if (state.size) {
+      sizeValEl.textContent = state.size;
+      sizeBadgeEl.textContent = 'detected'; sizeBadgeEl.className = 'badge ok';
+      sizeManualWrap.classList.remove('show');
+    } else {
+      sizeValEl.textContent = '—';
+      sizeBadgeEl.textContent = 'not found'; sizeBadgeEl.className = 'badge warn';
+      sizeManualWrap.classList.add('show');
+    }
+    if (state.serial) {
+      serialValEl.textContent = state.serial;
+      serialBadgeEl.textContent = 'detected'; serialBadgeEl.className = 'badge ok';
+      serialManualWrap.classList.remove('show');
+    } else {
+      serialValEl.textContent = '—';
+      serialBadgeEl.textContent = 'not found'; serialBadgeEl.className = 'badge warn';
+      serialManualWrap.classList.add('show');
+    }
+
+    statPulserEl.textContent = state.pulserFiles.length;
+    statAccEl.textContent = state.accFiles.length;
+    statRowsEl.textContent = state.rows.length;
+    statColsEl.textContent = state.dataCols.length;
+
+    renderSummary();
+    renderTable();
+    updateOutputNameAndButton();
+  }
+
+  // Returns the <thead>/<tbody> HTML for the full combined data table (all rows,
+  // no cap) so the on-page preview and the downloadable HTML report can share
+  // the exact same markup/logic.
+  function dataTableHtml() {
+    const cols = state.metaCols.concat(state.dataCols);
+    const metaSet = new Set(state.metaCols);
+
+    let html = '<thead><tr>' + cols.map((c) => '<th class="' + (metaSet.has(c) ? 'meta' : '') + '">' + escapeHtml(c) + '</th>').join('') + '</tr></thead>';
+    html += '<tbody>';
+    state.rows.forEach((row) => {
+      html += '<tr>' + cols.map((c) => {
+        let cls;
+        if (c === 'Result') {
+          cls = row.Result === 'Fail' ? 'result-fail' : 'result-pass';
+        } else if (metaSet.has(c)) {
+          cls = 'meta';
+        } else if (row.__failCells && row.__failCells.has(c)) {
+          cls = 'cell-fail';
+        } else {
+          cls = '';
         }
-      }
+        return '<td class="' + cls + '">' + escapeHtml(row[c] ?? '') + '</td>';
+      }).join('') + '</tr>';
+    });
+    html += '</tbody>';
+    return html;
+  }
 
-      if (header === null) {
-        showNotice('err', 'None of the selected files had any content.');
-        return;
-      }
+  function renderTable() {
+    if (state.rows.length === 0) { tableWrap.style.display = 'none'; return; }
+    tableWrap.style.display = 'block';
+    previewTable.innerHTML = dataTableHtml();
+  }
 
-      const combined = [header, ...dataLines].join('\n') + '\n';
-      const blob = new Blob([combined], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const outName = (outNameInput.value.trim() || computeDefaultOutName());
+  function buildSummaryData() {
+    const groups = new Map(); // "SN|direction|pressure" -> { fail: boolean }
+    const pressureSet = new Set();
+    const snList = [];
+    const snSeen = new Set();
+    let unparsedCount = 0;
 
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = outName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+    state.rows.forEach((row) => {
+      const meta = parseAccMeta(row.ACCFile);
+      if (!meta) { unparsedCount++; return; }
+      const sn = row.SN || '(no SN)';
+      if (!snSeen.has(sn)) { snSeen.add(sn); snList.push(sn); }
+      pressureSet.add(meta.pressure);
+      const key = sn + '|' + meta.direction + '|' + meta.pressure;
+      const cur = groups.get(key) || { fail: false };
+      if (row.Result === 'Fail') cur.fail = true;
+      groups.set(key, cur);
+    });
 
-      globalNotice.className = 'notice show';
-      globalNotice.style.background = '#ecfdf5';
-      globalNotice.style.color = '#16a34a';
-      globalNotice.textContent = 'Done — downloaded ' + outName + ' (' + groups.length + ' folders, ' + fileCount + ' files, ' + dataLines.length + ' data rows).';
-    } catch (err) {
-      showNotice('err', 'Something went wrong while combining: ' + err.message);
-    } finally {
-      combineBtn.disabled = false;
-      combineBtn.textContent = 'Combine & Download';
-      updateCombineState();
+    const pressures = Array.from(pressureSet).sort((a, b) => pressureSortKey(a) - pressureSortKey(b));
+    return { groups, pressures, sns: snList, unparsedCount };
+  }
+
+  // Shapes buildSummaryData() into a plain { header, rows, pressures, sns, unparsedCount }
+  // structure - two header columns (SN, Direction) then one per pressure step,
+  // two rows (Up/Down) per SN. This is the single source of truth the on-page
+  // table, the CSV report, the Excel report and the HTML report all read from.
+  function summaryRowsData() {
+    const { groups, pressures, sns, unparsedCount } = buildSummaryData();
+    if (sns.length === 0 || pressures.length === 0) return null;
+
+    const header = ['SN', 'Direction'].concat(pressures);
+    const rows = [];
+    sns.forEach((sn) => {
+      ['up', 'down'].forEach((dir) => {
+        const row = [sn, dir === 'up' ? 'Up' : 'Down'];
+        pressures.forEach((p) => {
+          const g = groups.get(sn + '|' + dir + '|' + p);
+          row.push(g ? (g.fail ? 'Fail' : 'Pass') : '—');
+        });
+        rows.push(row);
+      });
+    });
+    return { header, rows, pressures, sns, unparsedCount };
+  }
+
+  // Returns the <thead>/<tbody> HTML for the pass/fail summary table, or null
+  // if there's nothing to show. Shared by the on-page preview and the HTML report.
+  function summaryTableHtml(data) {
+    data = data || summaryRowsData();
+    if (!data) return null;
+
+    let html = '<thead><tr>' + data.header.map((h, i) => '<th class="' + (i < 2 ? 'meta' : '') + '">' + escapeHtml(h) + '</th>').join('') + '</tr></thead><tbody>';
+    data.rows.forEach((row, idx) => {
+      const firstOfPair = idx % 2 === 0;
+      html += '<tr>';
+      row.forEach((val, i) => {
+        if (i === 0) {
+          if (firstOfPair) html += '<td class="meta" rowspan="2">' + escapeHtml(val) + '</td>';
+        } else if (i === 1) {
+          html += '<td class="meta">' + escapeHtml(val) + '</td>';
+        } else {
+          const cls = val === 'Fail' ? 'result-fail' : (val === 'Pass' ? 'result-pass' : '');
+          html += '<td class="' + cls + '">' + escapeHtml(val) + '</td>';
+        }
+      });
+      html += '</tr>';
+    });
+    html += '</tbody>';
+    return html;
+  }
+
+  function renderSummary() {
+    const data = summaryRowsData();
+    if (!data) {
+      summarySection.style.display = 'none';
+      return;
+    }
+    summarySection.style.display = 'block';
+    summaryTable.innerHTML = summaryTableHtml(data);
+
+    if (data.unparsedCount > 0) {
+      summaryNote.className = 'summary-note show';
+      summaryNote.textContent = data.unparsedCount + ' row(s) had an ACC filename that didn\'t match the "<timestamp> up/dn <pressure>.csv" pattern, so they were left out of this summary (they\'re still in the data table and downloads below).';
+    } else {
+      summaryNote.className = 'summary-note';
+      summaryNote.textContent = '';
     }
   }
+
+  // ===========================================================================
+  // DOWNLOADS - CSV / Excel / HTML report generation
+  // ===========================================================================
+  function baseOutName() {
+    return effectiveSize() + '_' + effectiveSerial() + '_' + todayYYMMDD();
+  }
+
+  function updateOutputNameAndButton() {
+    const size = effectiveSize();
+    const serial = effectiveSerial();
+    const ready = size && serial && state.rows.length > 0;
+
+    downloadCsvBtn.disabled = !ready;
+    downloadExcelBtn.disabled = !ready;
+    downloadHtmlBtn.disabled = !ready;
+
+    if (ready) {
+      outNameEl.textContent = 'Will save as: ' + baseOutName() + '.csv / .xlsx / .html';
+    } else {
+      const missing = [];
+      if (!size) missing.push('size');
+      if (!serial) missing.push('SN');
+      outNameEl.textContent = missing.length ? ('Enter the missing ' + missing.join(' and ') + ' above to continue.') : 'No rows to export.';
+    }
+  }
+
+  function reportInfoRows() {
+    return [
+      ['Selected Folder', state.folderName],
+      ['Size', effectiveSize() || ''],
+      ['SN', effectiveSerial() || ''],
+      ['PulserDiag Files', String(state.pulserFiles.length)],
+      ['ACC Files', String(state.accFiles.length)],
+      ['Combined Rows', String(state.rows.length)]
+    ];
+  }
+
+  // Plain browser download via a temporary object URL + a hidden <a download>
+  // click - works everywhere this page can be hosted (GitHub Pages, offline
+  // as an installed PWA, any static host). Returns true so callers can share
+  // the same "did it succeed" branching used everywhere else in the app.
+  async function triggerDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return true;
+  }
+
+  function doneMessage(outName) {
+    const cols = state.metaCols.concat(state.dataCols);
+    return 'Done — saved ' + outName + ' (' + state.pulserFiles.length + ' PulserDiag files, ' + state.rows.length + ' rows, ' + cols.length + ' columns).';
+  }
+
+  // --- CSV: info block, then summary table, then the full combined data table ---
+  async function downloadCsvReport() {
+    clearNotice();
+    const cols = state.metaCols.concat(state.dataCols);
+    const lines = [];
+
+    reportInfoRows().forEach(([k, v]) => lines.push([k, v].map(csvEscape).join(',')));
+    lines.push('');
+
+    const summary = summaryRowsData();
+    if (summary) {
+      lines.push('Pass/Fail Summary (by pressure step)');
+      lines.push(summary.header.map(csvEscape).join(','));
+      summary.rows.forEach((row) => lines.push(row.map(csvEscape).join(',')));
+      lines.push('');
+    }
+
+    lines.push('Combined Data');
+    lines.push(cols.map(csvEscape).join(','));
+    state.rows.forEach((row) => lines.push(cols.map((c) => csvEscape(row[c])).join(',')));
+
+    const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/csv;charset=utf-8;' });
+    const outName = baseOutName() + '.csv';
+    const ok = await triggerDownload(blob, outName);
+    if (ok) showNotice('ok', doneMessage(outName));
+  }
+
+  // --- Excel: same content as the CSV report, but as real cell fills/colors ---
+  async function downloadExcelReport() {
+    clearNotice();
+    if (typeof ExcelJS === 'undefined') {
+      showNotice('err', 'The Excel export library did not load (needs an internet connection). Try the CSV or HTML report instead, or reload the page and try again.');
+      return;
+    }
+
+    downloadExcelBtn.disabled = true;
+    downloadExcelBtn.textContent = 'Building…';
+
+    try {
+      const FILL_OK = 'FFECFDF5', FONT_OK = 'FF16A34A';
+      const FILL_FAIL = 'FFFEF2F2', FONT_FAIL = 'FFDC2626';
+      const FILL_META = 'FFF0F9FF', FONT_META = 'FF0369A1';
+      const FILL_HEAD = 'FFEFF4FF';
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Report');
+      let r = 1;
+
+      reportInfoRows().forEach(([k, v]) => {
+        ws.getCell(r, 1).value = k;
+        ws.getCell(r, 1).font = { bold: true };
+        ws.getCell(r, 2).value = v;
+        r++;
+      });
+      r++;
+
+      const summary = summaryRowsData();
+      if (summary) {
+        ws.getCell(r, 1).value = 'Pass/Fail Summary (by pressure step)';
+        ws.getCell(r, 1).font = { bold: true };
+        r++;
+        summary.header.forEach((h, i) => {
+          const cell = ws.getCell(r, i + 1);
+          cell.value = h;
+          cell.font = { bold: true };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_HEAD } };
+        });
+        r++;
+        summary.rows.forEach((row) => {
+          row.forEach((val, i) => {
+            const cell = ws.getCell(r, i + 1);
+            cell.value = val;
+            if (i < 2) {
+              cell.font = { bold: true, color: { argb: FONT_META } };
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_META } };
+            } else if (val === 'Fail') {
+              cell.font = { bold: true, color: { argb: FONT_FAIL } };
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_FAIL } };
+            } else if (val === 'Pass') {
+              cell.font = { bold: true, color: { argb: FONT_OK } };
+              cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_OK } };
+            }
+          });
+          r++;
+        });
+        r++;
+      }
+
+      ws.getCell(r, 1).value = 'Combined Data';
+      ws.getCell(r, 1).font = { bold: true };
+      r++;
+
+      const cols = state.metaCols.concat(state.dataCols);
+      const metaSet = new Set(state.metaCols);
+      const dataHeaderRow = r;
+      cols.forEach((c, i) => {
+        const cell = ws.getCell(r, i + 1);
+        cell.value = c;
+        cell.font = { bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: metaSet.has(c) ? FILL_META : FILL_HEAD } };
+      });
+      r++;
+
+      state.rows.forEach((row) => {
+        cols.forEach((c, i) => {
+          const cell = ws.getCell(r, i + 1);
+          const raw = row[c];
+          const num = parseFloat(raw);
+          cell.value = (!metaSet.has(c) && raw !== '' && !isNaN(num) && isFinite(num)) ? num : raw;
+
+          if (c === 'Result') {
+            const fail = row.Result === 'Fail';
+            cell.font = { bold: true, color: { argb: fail ? FONT_FAIL : FONT_OK } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fail ? FILL_FAIL : FILL_OK } };
+          } else if (metaSet.has(c)) {
+            cell.font = { color: { argb: FONT_META } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_META } };
+          } else if (row.__failCells && row.__failCells.has(c)) {
+            cell.font = { bold: true, color: { argb: FONT_FAIL } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: FILL_FAIL } };
+          }
+        });
+        r++;
+      });
+
+      ws.getColumn(1).width = 30;
+      for (let i = 2; i <= cols.length; i++) ws.getColumn(i).width = 16;
+      ws.views = [{ state: 'frozen', ySplit: dataHeaderRow, xSplit: 2 }];
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const outName = baseOutName() + '.xlsx';
+      const ok = await triggerDownload(blob, outName);
+      if (ok) showNotice('ok', doneMessage(outName));
+    } catch (err) {
+      showNotice('err', 'Something went wrong while building the Excel file: ' + err.message);
+    } finally {
+      downloadExcelBtn.disabled = false;
+      downloadExcelBtn.textContent = 'Download Excel (.xlsx)';
+    }
+  }
+
+  // --- HTML report: a standalone snapshot page reusing this page's own <style>
+  // and the exact same table-building functions, so it looks identical offline. ---
+  async function downloadHtmlReport() {
+    clearNotice();
+    const pageStyle = document.querySelector('style').textContent;
+    const summary = summaryTableHtml();
+    const info = reportInfoRows();
+
+    const doc = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n' +
+      '<title>' + escapeHtml(baseOutName()) + ' Report</title>\n' +
+      '<style>' + pageStyle + '\nbody{display:block;}\n.wrap{max-width:none;}\n</style>\n</head>\n<body>\n' +
+      '<div class="wrap"><div class="card">\n' +
+      '<h1>JP Pressure - Report</h1>\n' +
+      info.map(([k, v]) => '<div class="row"><span class="label">' + escapeHtml(k) + '</span><span class="val">' + escapeHtml(v) + '</span></div>').join('\n') +
+      (summary ? '\n<div class="section"><h2 class="section-title">Pass/Fail Summary (by pressure step)</h2><div class="tablewrap"><table class="preview">' + summary + '</table></div></div>' : '') +
+      '\n<div class="section"><h2 class="section-title">Combined Data</h2><div class="tablewrap"><table class="preview">' + dataTableHtml() + '</table></div></div>' +
+      '\n</div></div>\n</body>\n</html>\n';
+
+    const blob = new Blob([doc], { type: 'text/html;charset=utf-8;' });
+    const outName = baseOutName() + '.html';
+    const ok = await triggerDownload(blob, outName);
+    if (ok) showNotice('ok', doneMessage(outName));
+  }
 })();
+</script>
+
+<!-- PWA: register the offline-caching service worker (path is relative, so
+     this also works when the app is hosted under a GitHub Pages subpath
+     like username.github.io/repo/). -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      const swUrl = new URL('sw.js', document.baseURI).href;
+      navigator.serviceWorker.register(swUrl).catch((err) => {
+        console.warn('Service worker registration failed:', err);
+      });
+    });
+  }
 </script>
 
 </body>
