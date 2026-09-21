@@ -154,12 +154,24 @@
   h2.section-title { font-size: 1rem; margin: 0 0 0.5rem; }
   .summary-note { margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--warn); display: none; }
   .summary-note.show { display: block; }
+
+  .titlebar { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+  .install-btn {
+    display: none; align-items: center; gap: 0.4rem; flex-shrink: 0;
+    background: var(--panel); color: var(--accent); border: 1px solid var(--accent);
+    font-size: 0.85rem; padding: 0.45rem 0.85rem;
+  }
+  .install-btn:hover { background: var(--accent-bg); }
+  .install-btn.show { display: inline-flex; }
 </style>
 </head>
 <body>
 <div class="wrap">
 <div class="card">
-  <h1>JP Pressure</h1>
+  <div class="titlebar">
+    <h1>JP Pressure</h1>
+    <button class="install-btn" id="installBtn" type="button">⊕ Install app</button>
+  </div>
   <p class="sub">Select the test folder (the one containing <strong>ACC</strong> and <strong>SDC</strong>). Every <code>PulserDiag*.csv</code> in SDC is paired by order with the matching ACC file, tagged with Size and SN, and shown below as a preview before download.</p>
 
   <!-- Filled in by renderCriteriaDescription() from CRITERIA_CONFIG at load time,
@@ -1017,6 +1029,46 @@
       });
     });
   }
+</script>
+
+<!-- PWA: on-page "Install app" button. Chrome/Edge fire beforeinstallprompt
+     when the manifest + service worker requirements are met instead of
+     showing their own prompt automatically - we capture that event, hold
+     it, and trigger it ourselves from a button the user can actually see
+     (rather than relying on people noticing the small icon in the address
+     bar). Browsers that don't support this event (Firefox, Safari) simply
+     never show the button, which is the correct fallback. -->
+<script>
+  (function () {
+    const installBtn = document.getElementById('installBtn');
+    let deferredPrompt = null;
+
+    // Already running as an installed app - nothing to offer.
+    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+      return;
+    }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); // stop the browser's own mini-infobar
+      deferredPrompt = e;
+      installBtn.classList.add('show');
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      installBtn.disabled = true;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice; // resolves regardless of accept/dismiss
+      deferredPrompt = null;
+      installBtn.classList.remove('show');
+      installBtn.disabled = false;
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredPrompt = null;
+      installBtn.classList.remove('show');
+    });
+  })();
 </script>
 
 </body>
