@@ -2,7 +2,7 @@
 //
 // Bump CACHE_NAME whenever index.html/manifest/icons change so returning
 // visitors pick up the new version instead of a stale cached one.
-const CACHE_NAME = 'jp-pressure-v1';
+const CACHE_NAME = 'jp-pressure-v2';
 
 // Paths are relative to this file's own location, so this still works when
 // the app is hosted under a GitHub Pages subpath (username.github.io/repo/).
@@ -17,7 +17,7 @@ const APP_SHELL = [
 
 // The Excel export button loads ExcelJS from a CDN at click time. Caching it
 // here means Excel export keeps working offline after the first successful
-// load; CSV and HTML report exports never needed it and always work offline.
+// load; CSV, HTML, and P1 exports never needed it and always work offline.
 const EXCELJS_CDN_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
 
 self.addEventListener('install', (event) => {

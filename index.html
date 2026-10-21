@@ -191,6 +191,7 @@
       <button id="downloadCsvBtn" disabled>Download CSV</button>
       <button id="downloadExcelBtn" disabled>Download Excel (.xlsx)</button>
       <button id="downloadHtmlBtn" disabled>Download HTML Report</button>
+      <button id="downloadP1Btn" disabled>Download P1 CSV</button>
       <button class="reset" id="resetBtn" type="button">Choose a different folder</button>
     </div>
     <p class="outname" id="outName"></p>
@@ -215,6 +216,12 @@
       <label for="serialManual">SN not detected — enter it:</label>
       <input type="text" id="serialManual" placeholder="8 digits" maxlength="8">
     </div>
+
+    <div class="row">
+      <span class="label">Pressure log file</span>
+      <span class="val"><span id="pressureFileVal">—</span> <span class="badge" id="pressureFileBadge"></span></span>
+    </div>
+    <p class="summary-note" id="pressureNote"></p>
 
     <div class="stats">
       <div class="stat"><span class="n" id="statPulser">0</span><span class="l">PulserDiag files</span></div>
@@ -359,6 +366,9 @@
   const serialBadgeEl = document.getElementById('serialBadge');
   const serialManualWrap = document.getElementById('serialManualWrap');
   const serialManualInput = document.getElementById('serialManual');
+  const pressureFileValEl = document.getElementById('pressureFileVal');
+  const pressureFileBadgeEl = document.getElementById('pressureFileBadge');
+  const pressureNoteEl = document.getElementById('pressureNote');
   const statPulserEl = document.getElementById('statPulser');
   const statAccEl = document.getElementById('statAcc');
   const statRowsEl = document.getElementById('statRows');
@@ -371,6 +381,7 @@
   const downloadCsvBtn = document.getElementById('downloadCsvBtn');
   const downloadExcelBtn = document.getElementById('downloadExcelBtn');
   const downloadHtmlBtn = document.getElementById('downloadHtmlBtn');
+  const downloadP1Btn = document.getElementById('downloadP1Btn');
   const resetBtn = document.getElementById('resetBtn');
   const outNameEl = document.getElementById('outName');
 
@@ -382,16 +393,25 @@
   // ===========================================================================
   const DEFAULT_META_COLS = ['PulserDiagFile', 'ACCFile', 'Direction', 'Pressure', 'Size', 'SN', 'Result'];
 
-  let state = {
-    folderName: '',
-    size: null,
-    serial: null,
-    accFiles: [],
-    pulserFiles: [],
-    metaCols: DEFAULT_META_COLS.slice(),
-    dataCols: [],
-    rows: [] // array of plain objects keyed by metaCols + dataCols
-  };
+  // Single source of truth for a fresh state object, used both at load and
+  // by resetAll(), so the two can never drift out of sync with each other.
+  function makeInitialState() {
+    return {
+      folderName: '',
+      size: null,
+      serial: null,
+      accFiles: [],
+      pulserFiles: [],
+      metaCols: DEFAULT_META_COLS.slice(),
+      dataCols: [],
+      rows: [], // array of plain objects keyed by metaCols + dataCols
+      vFile: null,      // the detected "V...csv" pressure-log File object, or null
+      p1Rows: null,     // parsed [timestamp, pri, sec, tempF] rows ready for the P1 export, or null
+      p1Status: 'none'  // 'none' | 'missing' | 'bad_header' | 'ok' - drives the pressure-file badge/note
+    };
+  }
+
+  let state = makeInitialState();
 
   // Holds every PulserDiag file's parsed { fileName, header, rows } - kept
   // separately from `state` because rebuildRows() re-derives `state.rows`
@@ -484,6 +504,7 @@
   downloadCsvBtn.addEventListener('click', downloadCsvReport);
   downloadExcelBtn.addEventListener('click', downloadExcelReport);
   downloadHtmlBtn.addEventListener('click', downloadHtmlReport);
+  downloadP1Btn.addEventListener('click', downloadP1File);
 
   function showNotice(kind, msg) {
     globalNotice.className = 'notice show ' + kind;
@@ -496,7 +517,7 @@
 
   function resetAll() {
     folderInput.value = '';
-    state = { folderName: '', size: null, serial: null, accFiles: [], pulserFiles: [], metaCols: DEFAULT_META_COLS.slice(), dataCols: [], rows: [] };
+    state = makeInitialState();
     // parsedFiles holds every PulserDiag file's full text content in memory - clear it
     // explicitly on reset so repeated runs in the same tab don't accumulate memory.
     parsedFiles = [];
@@ -505,6 +526,12 @@
     summarySection.style.display = 'none';
     resultSection.style.display = 'none';
     tableWrap.style.display = 'none';
+    downloadP1Btn.disabled = true;
+    pressureFileValEl.textContent = '—';
+    pressureFileBadgeEl.textContent = '';
+    pressureFileBadgeEl.className = 'badge';
+    pressureNoteEl.className = 'summary-note';
+    pressureNoteEl.textContent = '';
     clearNotice();
   }
 
@@ -554,6 +581,16 @@
       .filter((f) => inFolder(f, 'SDC') && /^pulserdiag.*\.csv$/i.test(f.name))
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    // The pressure-log file sits directly inside the selected folder itself
+    // (a sibling of ACC/SDC, not inside either of them) and its name starts
+    // with "V", e.g. "V45Ft_260723_013604_11420932.csv".
+    const vFiles = files
+      .filter((f) => {
+        const parts = (f.webkitRelativePath || '').split('/');
+        return parts.length === 2 && /^v/i.test(f.name) && /\.csv$/i.test(f.name);
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+
     if (pulserFiles.length === 0) {
       showNotice('err', 'No "PulserDiag*.csv" files found directly under an SDC subfolder inside "' + rootFolder + '". Make sure you selected the test folder itself (the one directly containing ACC and SDC, not a folder above it).');
       resultSection.style.display = 'none';
@@ -566,16 +603,19 @@
     state.folderName = rootFolder;
     state.accFiles = accFiles;
     state.pulserFiles = pulserFiles;
+    state.vFile = vFiles[0] || null;
     state.size = extractSize(rootFolder);
     state.serial = extractSerial(rootFolder);
 
     downloadCsvBtn.disabled = true;
     downloadExcelBtn.disabled = true;
     downloadHtmlBtn.disabled = true;
+    downloadP1Btn.disabled = true;
     resultSection.style.display = 'block';
 
     try {
       await buildRows();
+      await handlePressureFile();
       render();
     } catch (err) {
       showNotice('err', 'Something went wrong while reading the files: ' + err.message);
@@ -659,6 +699,175 @@
     if (state.serial) return state.serial;
     const v = serialManualInput.value.trim();
     return v || null;
+  }
+
+  // ===========================================================================
+  // PRESSURE LOG FILE (V... -> P1) - optional, separate from the ACC/SDC
+  // combine above. If the selected folder contains a file starting with "V"
+  // (e.g. "V45Ft_260723_013604_11420932.csv") directly inside it, its data
+  // is reformatted into a "P1_"-prefixed CSV for download. If no such file
+  // is found, or its header doesn't match the expected layout, the page
+  // says so instead of silently doing nothing.
+  // ===========================================================================
+
+  // The exact header PulserDiag-style pressure logs use at row 12 (index 11)
+  // of the file. Checked verbatim - if a vendor tweaks a column name this
+  // will correctly refuse to guess rather than mis-map data into P1.
+  const PRESSURE_LOG_HEADER = [
+    'No.', 'Date', 'Time', 'Pressure (psi)', 'Pri Pressure (psi)',
+    'Sec Pressure (psi)', 'Temperature (°F)', 'Temperature (°C)', 'PA', 'PB', 'PD'
+  ];
+
+  // These files are written in Windows-1252 (the degree sign is a single
+  // 0xB0 byte, not valid UTF-8) - reading them with the plain text reader
+  // used for PulserDiag/ACC files would corrupt that character, so this one
+  // decodes the raw bytes explicitly as Windows-1252 instead.
+  async function readFileAsWindows1252(file) {
+    const buf = await file.arrayBuffer();
+    return new TextDecoder('windows-1252').decode(buf);
+  }
+
+  // "23-07-26" + "13:36:10.95" (DD-MM-YY + 24h HH:MM:SS.ff) -> a Date
+  // rounded to the nearest whole second (so .95 rounds up a second, .35
+  // rounds down) - matches the reference P1 output exactly.
+  function parseVTimestamp(dateStr, timeStr) {
+    const [dd, mm, yy] = dateStr.split('-').map(Number);
+    const [hh, mi] = timeStr.split(':');
+    const secFloat = parseFloat(timeStr.split(':')[2]);
+    const d = new Date(2000 + yy, mm - 1, dd, Number(hh), Number(mi), 0, 0);
+    d.setMilliseconds(Math.round(secFloat * 1000)); // overflow rolls into minutes/hours/day correctly
+    return new Date(Math.round(d.getTime() / 1000) * 1000);
+  }
+
+  // -> "7/23/26 1:36:10 PM" (no leading zero on month/day/hour, 2-digit
+  // minutes/seconds/year, matching the reference P1 output's format).
+  function formatP1Timestamp(d) {
+    let h = d.getHours();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    const se = String(d.getSeconds()).padStart(2, '0');
+    const yy = String(d.getFullYear() % 100).padStart(2, '0');
+    return (d.getMonth() + 1) + '/' + d.getDate() + '/' + yy + ' ' + h + ':' + mi + ':' + se + ' ' + ampm;
+  }
+
+  // Re-parsing a decimal string as a float and converting it back to text
+  // naturally drops trailing zeros (e.g. "298.490" -> "298.49"), which is
+  // exactly what the reference P1 output does.
+  function formatP1Number(v) {
+    const n = parseFloat(v);
+    return isNaN(n) ? v : String(n);
+  }
+
+  // Validates and reformats one pressure-log file's text into P1 rows.
+  // Returns { ok: true, rows } or { ok: false, reason: 'bad_header' }.
+  function parsePressureLogText(text) {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
+    if (lines.length < 12) return { ok: false, reason: 'bad_header' };
+
+    const header = splitCsvLine(lines[11]); // row 12, 1-indexed
+    const headerOk = header.length === PRESSURE_LOG_HEADER.length &&
+      header.every((h, i) => h === PRESSURE_LOG_HEADER[i]);
+    if (!headerOk) return { ok: false, reason: 'bad_header' };
+
+    const col = {
+      date: header.indexOf('Date'),
+      time: header.indexOf('Time'),
+      pri: header.indexOf('Pri Pressure (psi)'),
+      sec: header.indexOf('Sec Pressure (psi)'),
+      tempF: header.indexOf('Temperature (°F)')
+    };
+
+    const rows = [];
+    for (let i = 12; i < lines.length; i++) {
+      const cells = splitCsvLine(lines[i]);
+      if (cells.length < PRESSURE_LOG_HEADER.length) continue; // skip blank/malformed trailing lines
+      const ts = formatP1Timestamp(parseVTimestamp(cells[col.date], cells[col.time]));
+      rows.push([ts, formatP1Number(cells[col.pri]), formatP1Number(cells[col.sec]), formatP1Number(cells[col.tempF])]);
+    }
+    return { ok: true, rows };
+  }
+
+  // Builds the final P1 CSV text from parsed rows - a fixed 4-line header
+  // (matching the reference output exactly, including its two blank
+  // "DAQ SN:"/"Vessel Size:" placeholder lines) followed by the data.
+  function buildP1CsvText(rows) {
+    const lines = [
+      'Timestamp,P1_Pressure01_psi,P1_Pressure02_psi,P1_Temp_degF',
+      'DAQ SN:,,,',
+      'Vessel Size:,,,',
+      'No.,Pri Pressure (psi),Sec Pressure (psi),Temperature (°F)'
+    ];
+    rows.forEach((r) => lines.push(r.join(',')));
+    return lines.join('\r\n') + '\r\n';
+  }
+
+  // Encodes a string as Windows-1252/Latin-1 bytes (one byte per char code)
+  // so the downloaded file matches the reference P1 file's encoding - safe
+  // here because buildP1CsvText() only ever emits ASCII plus the single
+  // U+00B0 degree sign, which is the same code point in both Latin-1 and
+  // Windows-1252.
+  function encodeLatin1(str) {
+    const bytes = new Uint8Array(str.length);
+    for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xFF;
+    return bytes;
+  }
+
+  // Detects, reads and validates state.vFile (set by handleFiles), and
+  // updates the pressure-file status row/badge/button accordingly. Safe to
+  // call even when no V file was found - that's the "missing" case.
+  async function handlePressureFile() {
+    if (!state.vFile) {
+      state.p1Rows = null;
+      state.p1Status = 'missing';
+      pressureFileValEl.textContent = '—';
+      pressureFileBadgeEl.textContent = 'missing';
+      pressureFileBadgeEl.className = 'badge warn';
+      pressureNoteEl.className = 'summary-note show';
+      pressureNoteEl.textContent = 'Pressure file is missing — no file starting with "V" was found directly inside the selected folder, so no P1 file can be generated.';
+      downloadP1Btn.disabled = true;
+      return;
+    }
+
+    pressureFileValEl.textContent = state.vFile.name;
+
+    let parsed;
+    try {
+      const text = await readFileAsWindows1252(state.vFile);
+      parsed = parsePressureLogText(text);
+    } catch (err) {
+      parsed = { ok: false, reason: 'read_error' };
+    }
+
+    if (!parsed.ok) {
+      state.p1Rows = null;
+      state.p1Status = 'bad_header';
+      pressureFileBadgeEl.textContent = 'invalid format';
+      pressureFileBadgeEl.className = 'badge err';
+      pressureNoteEl.className = 'summary-note show';
+      pressureNoteEl.textContent = 'Pressure file "' + state.vFile.name + '" was found, but its header row (row 12) doesn\'t match the expected columns, so no P1 file can be generated.';
+      downloadP1Btn.disabled = true;
+      return;
+    }
+
+    state.p1Rows = parsed.rows;
+    state.p1Status = 'ok';
+    pressureFileBadgeEl.textContent = 'ok';
+    pressureFileBadgeEl.className = 'badge ok';
+    pressureNoteEl.className = 'summary-note';
+    pressureNoteEl.textContent = '';
+    downloadP1Btn.disabled = false;
+  }
+
+  function downloadP1File() {
+    if (!state.p1Rows) return;
+    clearNotice();
+    const csvText = buildP1CsvText(state.p1Rows);
+    const blob = new Blob([encodeLatin1(csvText)], { type: 'text/csv;charset=windows-1252;' });
+    const outName = 'P1_' + state.vFile.name;
+    triggerDownload(blob, outName);
+    showNotice('ok', 'Done — saved ' + outName + ' (' + state.p1Rows.length + ' rows).');
   }
 
   // ===========================================================================
@@ -1065,7 +1274,7 @@
     let deferredPrompt = null;
 
     // Already running as an installed app - nothing to offer.
-    if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+    if ((typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone) {
       return;
     }
 

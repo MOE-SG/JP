@@ -2,10 +2,10 @@
 
 A single-page, installable web app that combines pressure-test measurement
 data with its matching per-step reference files, applies configurable
-pass/fail QC criteria, and exports a combined report as CSV, formatted
-Excel, or a standalone HTML file. No build step, no server, no dependencies
-beyond what loads from a CDN at run time — open `index.html` (locally or
-hosted) and go.
+pass/fail QC criteria, reformats an associated pressure-log file, and
+exports everything as CSV, formatted Excel, or a standalone HTML file. No
+build step, no server, no dependencies beyond what loads from a CDN at run
+time — open `index.html` (locally or hosted) and go.
 
 ## What it does
 
@@ -34,6 +34,31 @@ hosted) and go.
 Picking a new folder (or clicking "Choose a different folder") while a
 folder is already loaded asks for confirmation first, since doing so
 discards the currently loaded data and results.
+
+### Pressure log file (P1 export)
+
+If the selected folder also contains a file starting with `V` directly
+inside it (a sibling of `ACC`/`SDC`, not nested in either — e.g.
+`V45Ft_260723_013604_11420932.csv`), the app validates its header row
+(row 12) and, if it matches the expected layout, reformats it into a
+`P1_`-prefixed CSV available as its own download:
+
+- **Timestamp** — the file's Date + Time columns combined, rounded to the
+  nearest second, reformatted as `M/D/YY h:mm:ss AM/PM`
+- **P1_Pressure01_psi** / **P1_Pressure02_psi** — the Pri/Sec Pressure
+  (psi) columns
+- **P1_Temp_degF** — the Temperature (°F) column
+
+If no such file is found, the page says so ("Pressure file is missing")
+rather than silently skipping it; if one is found but its header doesn't
+match, it says that instead and the P1 button stays disabled. Either way,
+the rest of the app (the ACC/SDC combine above) is unaffected.
+
+*Known limitation:* a handful of rows can land exactly on a half-second
+tie in the log's time column (which only records to the hundredth of a
+second) — in that rare case, standard rounding is used, which may land on
+an adjacent second to a value computed from a different, higher-precision
+source. Every pressure/temperature value is unaffected either way.
 
 ## Pass/fail criteria
 
@@ -76,9 +101,9 @@ button appears next to the page title — click it to install, no need to
 hunt for the small icon some browsers tuck into the address bar. Firefox
 and Safari don't support this install flow at all; on those, there's
 simply no button (Safari users can still use the browser's own Share →
-"Add to Home Screen" instead). CSV and HTML exports always work offline
-once installed; the Excel export needs its formatting library to have
-loaded from its CDN at least once, after which it's cached too.
+"Add to Home Screen" instead). CSV, HTML, and P1 exports always work
+offline once installed; the Excel export needs its formatting library to
+have loaded from its CDN at least once, after which it's cached too.
 
 **When you update `index.html`, `manifest.webmanifest`, or any icon**,
 bump `CACHE_NAME` in `sw.js` (e.g. `v1` → `v2`). Otherwise returning
