@@ -710,13 +710,6 @@
   // says so instead of silently doing nothing.
   // ===========================================================================
 
-  // The exact header PulserDiag-style pressure logs use at row 12 (index 11)
-  // of the file. Checked verbatim - if a vendor tweaks a column name this
-  // will correctly refuse to guess rather than mis-map data into P1.
-  const PRESSURE_LOG_HEADER = [
-    'No.', 'Date', 'Time', 'Pressure (psi)', 'Pri Pressure (psi)',
-    'Sec Pressure (psi)', 'Temperature (°F)', 'Temperature (°C)', 'PA', 'PB', 'PD'
-  ];
 
   // These files are written in Windows-1252 (the degree sign is a single
   // 0xB0 byte, not valid UTF-8) - reading them with the plain text reader
@@ -764,28 +757,34 @@
   function parsePressureLogText(text) {
     const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
     while (lines.length && lines[lines.length - 1].trim() === '') lines.pop();
-    if (lines.length < 12) return { ok: false, reason: 'bad_header' };
-
-    const header = splitCsvLine(lines[11]); // row 12, 1-indexed
-    const headerOk = header.length === PRESSURE_LOG_HEADER.length &&
-      header.every((h, i) => h === PRESSURE_LOG_HEADER[i]);
-    if (!headerOk) return { ok: false, reason: 'bad_header' };
+    // The header row isn't always at row 12 (older files put it higher, e.g.
+    // row 9) and older files may lack the PA/PB/PD columns. So scan the top of
+    // the file for the first row containing every column P1 actually needs.
+    const REQUIRED = ['Date', 'Time', 'Pri Pressure (psi)', 'Sec Pressure (psi)', 'Temperature (\u00B0F)'];
+    let headerIdx = -1, header = null;
+    for (let i = 0; i < Math.min(lines.length, 40); i++) {
+      const cells = splitCsvLine(lines[i]).map((c) => c.trim());
+      if (REQUIRED.every((h) => cells.indexOf(h) !== -1)) { headerIdx = i; header = cells; break; }
+    }
+    if (headerIdx === -1) return { ok: false, reason: 'bad_header' };
 
     const col = {
       date: header.indexOf('Date'),
       time: header.indexOf('Time'),
       pri: header.indexOf('Pri Pressure (psi)'),
       sec: header.indexOf('Sec Pressure (psi)'),
-      tempF: header.indexOf('Temperature (°F)')
+      tempF: header.indexOf('Temperature (\u00B0F)')
     };
+    const needCells = Math.max(col.date, col.time, col.pri, col.sec, col.tempF) + 1;
 
     const rows = [];
-    for (let i = 12; i < lines.length; i++) {
+    for (let i = headerIdx + 1; i < lines.length; i++) {
       const cells = splitCsvLine(lines[i]);
-      if (cells.length < PRESSURE_LOG_HEADER.length) continue; // skip blank/malformed trailing lines
-      const ts = formatP1Timestamp(parseVTimestamp(cells[col.date], cells[col.time]));
+      if (cells.length < needCells || !/^\d+-\d+-\d+$/.test(cells[col.date].trim())) continue; // skip blank/malformed lines
+      const ts = formatP1Timestamp(parseVTimestamp(cells[col.date].trim(), cells[col.time].trim()));
       rows.push([ts, formatP1Number(cells[col.pri]), formatP1Number(cells[col.sec]), formatP1Number(cells[col.tempF])]);
     }
+    if (!rows.length) return { ok: false, reason: 'bad_header' };
     return { ok: true, rows };
   }
 
@@ -846,7 +845,7 @@
       pressureFileBadgeEl.textContent = 'invalid format';
       pressureFileBadgeEl.className = 'badge err';
       pressureNoteEl.className = 'summary-note show';
-      pressureNoteEl.textContent = 'Pressure file "' + state.vFile.name + '" was found, but its header row (row 12) doesn\'t match the expected columns, so no P1 file can be generated.';
+      pressureNoteEl.textContent = 'Pressure file "' + state.vFile.name + '" was found, but has no header row with the required columns (Date, Time, Pri Pressure, Sec Pressure, Temperature °F), so no P1 file can be generated.';
       downloadP1Btn.disabled = true;
       return;
     }
